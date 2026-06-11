@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>ZoomOut — guess the painting</title>
+<style>
+  :root {
+    --bg: #0f1012;
+    --panel: #1a1c1f;
+    --ink: #e9eaec;
+    --muted: #989ca3;
+    --line: #2a2d31;
+    --line-strong: #33363b;
+    --accent: #ffffff;
+    --accent-ink: #15161a;
+    --good: #ffffff;
+    --bad: #aeb2b7;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.4 "Iowan Old Style", "Palatino", Georgia, serif;
+    height: 100dvh; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* frosted-glass chrome floating over the full-screen painting */
+  .glass {
+    background: rgba(20, 22, 26, 0.45);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  header {
+    position: fixed; z-index: 2;
+    top: calc(10px + env(safe-area-inset-top));
+    left: 12px; right: 12px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-radius: 16px;
+  }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: 0.5px; }
+  header .meta { display: flex; flex-direction: column; line-height: 1.3; }
+  header .sub { font-size: 11px; color: var(--muted); }
+  header .sub b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .ptsbox { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+  #pointsNow { font-size: 28px; font-weight: normal;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
+  #zoomLvl { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  main {
+    position: fixed; z-index: 2;
+    left: 12px; right: 12px;
+    bottom: calc(16px + env(safe-area-inset-bottom) + var(--kb, 0px));
+    display: flex; flex-direction: column; gap: 12px;
+    pointer-events: none;  /* no panel: let touches reach the painting between controls */
+  }
+  main .guessbar, main .row button { pointer-events: auto; }
+  /* while typing, collapse to input + feedback so keyboard + chrome leave the painting visible */
+  main.typing .row { display: none; }
+
+  /* zen view: swipe the chrome away to study the painting */
+  header, main { transition: transform 0.28s ease; }
+  body.zen header { transform: translateY(calc(-100% - 24px)); }
+  body.zen main { transform: translateY(calc(100% + 48px)); }
+  #showui {
+    position: fixed; z-index: 3; left: 50%;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(250%);  /* parked off-screen */
+    width: 56px; height: 34px; padding: 0; flex: none;
+    border-radius: 999px; font-size: 15px; color: var(--ink);
+    transition: transform 0.28s ease;
+  }
+  body.zen #showui { transform: translateX(-50%) translateY(0); }
+
+  .stage {
+    position: fixed; inset: 0; z-index: 0;
+    background: #000;
+    overflow: hidden; display: flex; align-items: center; justify-content: center;
+    touch-action: none;  /* we handle pinch ourselves */
+  }
+  .stage img {
+    max-width: 100%; max-height: 100%;
+    transform-origin: var(--fx) var(--fy);
+    transform: scale(var(--scale));
+    -webkit-user-drag: none; pointer-events: none;
+  }
+  .stage .vignette { position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 140px 30px rgba(0,0,0,0.55); }
+  .stage .hint { position: absolute; top: calc(72px + env(safe-area-inset-top)); left: 0; right: 0;
+    text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; opacity: 0.8;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+
+  .guessbar { position: relative; flex: 0 0 auto; display: none; }
+  main.solving .guessbar { display: block; }
+  .guessbar input[type=text] {
+    width: 100%; padding: 14px 16px; font: inherit; font-size: 17px;
+    background: rgba(20,22,26,0.6); color: var(--ink);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; -webkit-user-select: text; user-select: text;
+  }
+  .guessbar input[type=text]::placeholder { color: var(--muted); }
+  .guessbar input[type=text]:focus { outline: none; border-color: rgba(255,255,255,0.45); }
+
+  .suggestions {
+    position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
+    background: rgba(20,22,26,0.7);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    backdrop-filter: blur(24px) saturate(140%);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+    overflow: hidden; z-index: 5; max-height: 40vh; overflow-y: auto;
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.5);
+  }
+  .suggestions .item { padding: 13px 16px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .suggestions .item:last-child { border-bottom: none; }
+  .suggestions .item small { color: var(--muted); }
+  .suggestions .item.active { background: rgba(255,255,255,0.1); }
+
+  .row { display: flex; justify-content: center; align-items: center; gap: 28px; flex: 0 0 auto; }
+  .row button {
+    width: 72px; height: 72px; flex: none; padding: 0;
+    border-radius: 50%; font-size: 30px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    touch-action: manipulation;
+  }
+  #zoomout { background: rgba(64, 132, 255, 0.30); border-color: rgba(120, 170, 255, 0.5); color: #dce9ff; }
+  #solve   { background: rgba(52, 190, 120, 0.28); border-color: rgba(110, 220, 160, 0.45); color: #d7f7e6; }
+  #giveup  { background: rgba(235, 75, 65, 0.28);  border-color: rgba(255, 125, 115, 0.45); color: #ffdbd6; }
+  button {
+    padding: 13px 16px; font: inherit; font-size: 15px; cursor: pointer;
+    background: rgba(255,255,255,0.07); color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; flex: 1;
+  }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
+
+  .flash { min-height: 20px; font-size: 14px; text-align: center; flex: 0 0 auto;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+  .flash.bad { color: var(--bad); }
+  .flash.good { color: var(--good); }
+
+  .reveal {
+    position: fixed; inset: 0; background: rgba(8,9,11,0.6);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px;
+  }
+  .reveal.show { display: flex; }
+  .reveal .card {
+    background: rgba(22,24,28,0.7);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    backdrop-filter: blur(24px) saturate(140%);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 18px;
+    padding: 22px; max-width: 440px; width: 100%; text-align: center;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .reveal .card img { max-width: 100%; max-height: 34vh; border-radius: 6px; margin-bottom: 16px; }
+  .reveal .card h2 { margin: 0 0 4px; font-size: 22px; }
+  .reveal .card .by { color: var(--muted); margin-bottom: 4px; }
+  .reveal .card .period {
+    display: inline-block; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;
+    color: var(--accent); border: 1px solid #3a3f47; border-radius: 999px;
+    padding: 3px 12px; margin-bottom: 12px;
+  }
+  .reveal .card .desc { font-size: 14px; line-height: 1.5; color: #c5c9ce; margin: 0 0 14px; text-align: left; }
+  .reveal .card .earned { font-size: 30px; color: var(--accent); margin: 6px 0 18px;
+    font-variant-numeric: tabular-nums; }
+  .reveal .card .earned.zero { color: var(--bad); }
+  .reveal .card button { width: 100%; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <img id="art" alt="mystery painting">
+  <div class="vignette"></div>
+  <div class="hint" id="hint">hold “Zoom out” to reveal more — there's no going back</div>
+</div>
+
+<header class="glass">
+  <div class="meta">
+    <h1>ZoomOut</h1>
+    <span class="sub">#<b id="roundNo">1</b>/<b id="roundTot">?</b> · total <b id="total">0</b></span>
+  </div>
+  <div class="ptsbox">
+    <b id="pointsNow">1000</b>
+    <span id="zoomLvl">×12.0</span>
+  </div>
+</header>
+
+<main>
+  <div class="guessbar">
+    <input type="text" id="guess" placeholder="Name the painting…" autocomplete="off"
+           autocorrect="off" autocapitalize="off" spellcheck="false">
+    <div class="suggestions" id="suggestions" hidden></div>
+  </div>
+
+  <div class="flash" id="flash"></div>
+
+  <div class="row">
+    <button id="zoomout" aria-label="zoom out">−</button>
+    <button id="solve" aria-label="solve">✓</button>
+    <button id="giveup" aria-label="give up">✕</button>
+  </div>
+</main>
+
+<button id="showui" class="glass" aria-label="show controls">⌃</button>
+
+<div class="reveal" id="reveal">
+  <div class="card">
+    <img id="revealImg" alt="">
+    <h2 id="revealTitle"></h2>
+    <div class="by" id="revealBy"></div>
+    <div class="period" id="revealPeriod"></div>
+    <p class="desc" id="revealDesc"></p>
+    <div class="earned" id="revealEarned"></div>
+    <button class="primary" id="nextBtn">Next painting →</button>
+  </div>
+</div>
+
+<!-- PAINTINGS:START (generated by generate.py — do not edit by hand except focal/startScale) -->
+<script>window.PAINTINGS = [{"id": 0, "title": "Mona Lisa", "artist": "Leonardo da Vinci", "year": "c. 1503", "period": "Italian Renaissance", "aliases": ["la gioconda", "la joconde"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/3840px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg", "description": "The Mona Lisa is a half-length portrait painting by the Italian artist Leonardo da Vinci. Considered an archetypal masterpiece of the Italian Renaissance, it has been described as \"the best known, the most visited, the most written about, the most sung about, [and] the most parodied work of art in the world.\"", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 1, "title": "The Starry Night", "artist": "Vincent van Gogh", "year": "1889", "period": "Post-Impressionism", "aliases": ["starry night"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/3840px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg", "description": "'The Starry Night' is an oil-on-canvas painting by the Dutch Post-Impressionist painter Vincent van Gogh. Painted in June 1889, it depicts the view from the east-facing window of his asylum room at Saint-Rémy-de-Provence, just before sunrise, with the addition of an imaginary village.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 2, "title": "The Scream", "artist": "Edvard Munch", "year": "1893", "period": "Expressionism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/c/c5/Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73_cm%2C_National_Gallery_of_Norway.jpg", "description": "The Scream is an art composition created by Norwegian artist Edvard Munch in 1893. The Norwegian name of the piece is Skrik ('Scream'), and the German title under which it was first exhibited is Der Schrei der Natur.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 3, "title": "Girl with a Pearl Earring", "artist": "Johannes Vermeer", "year": "c. 1665", "period": "Dutch Golden Age (Baroque)", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/1665_Girl_with_a_Pearl_Earring.jpg/3840px-1665_Girl_with_a_Pearl_Earring.jpg", "description": "Girl with a Pearl Earring is an oil painting by Dutch Golden Age painter Johannes Vermeer, dated c. 1665.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 4, "title": "The Birth of Venus", "artist": "Sandro Botticelli", "year": "c. 1485", "period": "Early Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg/3840px-Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg", "description": "The Birth of Venus is a painting by the Italian artist Sandro Botticelli, probably executed in the mid-1480s. It depicts the goddess Venus arriving at the shore after her birth, when she had emerged from the sea fully grown.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 5, "title": "American Gothic", "artist": "Grant Wood", "year": "1930", "period": "Regionalism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Grant_Wood_-_American_Gothic_-_Google_Art_Project.jpg/3840px-Grant_Wood_-_American_Gothic_-_Google_Art_Project.jpg", "description": "American Gothic is a 1930 oil painting on beaverboard by the American Regionalist artist Grant Wood, depicting a Midwestern farmer and his daughter standing in front of their Carpenter Gothic style home. It is one of the most famous American paintings of the 20th century and is frequently referenced in popular culture.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 6, "title": "The Night Watch", "artist": "Rembrandt", "year": "1642", "period": "Dutch Golden Age (Baroque)", "aliases": ["nightwatch"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/La_ronda_de_noche%2C_por_Rembrandt_van_Rijn.jpg/3840px-La_ronda_de_noche%2C_por_Rembrandt_van_Rijn.jpg", "description": "Militia Company of District II under the Command of Captain Frans Banninck Cocq, also known as The Shooting Company of Frans Banning Cocq and Willem van Ruytenburch, but commonly referred to as The Night Watch, is a 1642 painting by Rembrandt van Rijn. It is in the collection of the Amsterdam Museum but is prominently displayed in the Rijksmuseum as the best-known painting in its collection.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 7, "title": "Las Meninas", "artist": "Diego Velázquez", "year": "1656", "period": "Baroque", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg/3840px-Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg", "description": "Las Meninas is a 1656 painting in the Museo del Prado in Madrid, by Diego Velázquez, the leading artist in the court of King Philip IV of Spain and Portugal, and of the Spanish Golden Age. It has become one of the most widely analyzed works in Western painting for the way its complex and enigmatic composition raises questions about reality and illusion, and for the uncertain relationship it creates between the viewer and the figures depicted.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 8, "title": "The Great Wave off Kanagawa", "artist": "Hokusai", "year": "c. 1831", "period": "Ukiyo-e (Edo period)", "aliases": ["great wave"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Tsunami_by_hokusai_19th_century.jpg/3840px-Tsunami_by_hokusai_19th_century.jpg", "description": "The Great Wave off Kanagawa  is a woodblock print by the Japanese ukiyo-e artist Hokusai (1760–1849), created in late 1831 during the Edo period of Japanese history. The print depicts three boats moving through a storm-tossed sea, with a large, cresting wave forming a spiral in the centre over the boats and Mount Fuji in the background.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 9, "title": "The Kiss", "artist": "Gustav Klimt", "year": "1908", "period": "Symbolism / Art Nouveau", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/The_Kiss_-_Gustav_Klimt_-_Google_Cultural_Institute.jpg/3840px-The_Kiss_-_Gustav_Klimt_-_Google_Cultural_Institute.jpg", "description": "The Kiss is an oil-on-canvas painting with added gold leaf, silver and platinum by the Austrian Symbolist painter Gustav Klimt. It was painted at some point in 1907 and 1908, during the height of what scholars call his \"Golden Period\".", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 10, "title": "The Creation of Adam", "artist": "Michelangelo", "year": "c. 1512", "period": "High Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/5/5b/Michelangelo_-_Creation_of_Adam_%28cropped%29.jpg", "description": "The Creation of Adam, also known as The Creation of Man, is a fresco painting by Italian artist Michelangelo, which forms part of the Sistine Chapel's ceiling, painted 1508–1512. It illustrates the Biblical creation narrative from the Book of Genesis in which God gives life to Adam, the first man.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 11, "title": "The Garden of Earthly Delights", "artist": "Hieronymus Bosch", "year": "c. 1500", "period": "Northern Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/The_Garden_of_earthly_delights.jpg/3840px-The_Garden_of_earthly_delights.jpg", "description": "The Garden of Earthly Delights is the modern title given to a five-panel triptych by the Early Netherlandish master Hieronymus Bosch, between 1490 and 1510, when Bosch was between 40 and 60 years old. Because of Bosch's religious beliefs, interpretations of the work typically assume it is a warning against the perils of temptation.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 12, "title": "Sunflowers", "artist": "Vincent van Gogh", "year": "1888", "period": "Post-Impressionism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/4/46/Vincent_Willem_van_Gogh_127.jpg", "description": "Sunflowers is the title of two series of still life paintings by the Dutch painter Vincent van Gogh. The first series, executed in Paris in 1887, depicts the flowers lying on the ground, while the second set, made a year later in Arles, shows a bouquet of sunflowers in a vase.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 13, "title": "The Last Supper", "artist": "Leonardo da Vinci", "year": "c. 1495", "period": "High Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/The_Last_Supper_-_Leonardo_Da_Vinci_-_High_Resolution_32x16.jpg/3840px-The_Last_Supper_-_Leonardo_Da_Vinci_-_High_Resolution_32x16.jpg", "description": "The Last Supper is a mural painting by the Italian High Renaissance artist Leonardo da Vinci, dated to c. 1495–1498, housed in the refectory of the Convent of Santa Maria delle Grazie in Milan, Italy.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 14, "title": "The Arnolfini Portrait", "artist": "Jan van Eyck", "year": "1434", "period": "Early Netherlandish", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/The_Arnolfini_portrait_%281434%29.jpg/3840px-The_Arnolfini_portrait_%281434%29.jpg", "description": "The Arnolfini Portrait is an oil painting on oak panel by the Early Netherlandish painter Jan van Eyck, dated 1434 and now in the National Gallery, London. It is a full-length double portrait, believed to depict the Italian merchant Giovanni di Nicolao Arnolfini and his wife, presumably in their residence at the Flemish city of Bruges.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 15, "title": "A Sunday on La Grande Jatte", "artist": "Georges Seurat", "year": "1886", "period": "Pointillism / Neo-Impressionism", "aliases": ["la grande jatte"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg/3840px-A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg", "description": "A Sunday Afternoon on the Island of La Grande Jatte was painted from 1884 to 1886 and is Georges Seurat's most famous work. It is recognised as a leading example of pointillist technique and as a founding work of the neo-impressionist movement.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 16, "title": "Café Terrace at Night", "artist": "Vincent van Gogh", "year": "1888", "period": "Post-Impressionism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Van_Gogh_-_Terrace_of_a_Caf%C3%A9_at_Night_%28Place_du_Forum%29_1888.jpg/3840px-Van_Gogh_-_Terrace_of_a_Caf%C3%A9_at_Night_%28Place_du_Forum%29_1888.jpg", "description": "Café Terrace at Night is an 1888 oil painting by the Dutch artist Vincent van Gogh. It is also known as The Cafe Terrace on the Place du Forum, and, when first exhibited in 1891, was entitled Coffeehouse, in the evening.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 17, "title": "Bal du moulin de la Galette", "artist": "Pierre-Auguste Renoir", "year": "1876", "period": "Impressionism", "aliases": ["moulin de la galette"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Renoir%2C_Pierre-Auguste_-_Dance_at_Le_Moulin_de_la_Galette%2C_1876.jpg/3840px-Renoir%2C_Pierre-Auguste_-_Dance_at_Le_Moulin_de_la_Galette%2C_1876.jpg", "description": "Bal du moulin de la Galette is an 1876 painting by French artist Pierre-Auguste Renoir.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 18, "title": "Whistler's Mother", "artist": "James McNeill Whistler", "year": "1871", "period": "Realism / Tonalism", "aliases": ["arrangement in grey and black"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Whistlers_Mother_high_res.jpg/3840px-Whistlers_Mother_high_res.jpg", "description": "Arrangement in Grey and Black No. 1, best known under its colloquial name Whistler's Mother or Portrait of Artist's Mother, is a painting in oils on canvas created by the American-born painter James McNeill Whistler in 1871.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 19, "title": "Impression, Sunrise", "artist": "Claude Monet", "year": "1872", "period": "Impressionism", "aliases": ["impression soleil levant"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Monet_-_Impression%2C_Sunrise.jpg/3840px-Monet_-_Impression%2C_Sunrise.jpg", "description": "Impression, Sunrise is an 1872 painting by Claude Monet first shown at what would become known as the \"Exhibition of the Impressionists\" in Paris in April, 1874. The painting is credited with inspiring the name of the Impressionist movement.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 20, "title": "Liberty Leading the People", "artist": "Eugène Delacroix", "year": "1830", "period": "Romanticism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg/3840px-La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg", "description": "Liberty Leading the People is a painting of the Romantic era by the French artist Eugène Delacroix, commemorating the July Revolution of 1830 that toppled King Charles X. A bare-breasted \"woman of the people\" with a Phrygian cap personifying the concept and Goddess of Liberty, accompanied by a young boy brandishing a pistol in each hand, leads a group of various people forward over a barricade and the bodies of the fallen while holding aloft the flag of the French Revolution—the tricolour, which again became France's national flag after these events—in one hand, and brandishing a bayonetted musket with the other.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 21, "title": "The Raft of the Medusa", "artist": "Théodore Géricault", "year": "1819", "period": "Romanticism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/JEAN_LOUIS_TH%C3%89ODORE_G%C3%89RICAULT_-_La_Balsa_de_la_Medusa_%28Museo_del_Louvre%2C_1818-19%29.jpg/3840px-JEAN_LOUIS_TH%C3%89ODORE_G%C3%89RICAULT_-_La_Balsa_de_la_Medusa_%28Museo_del_Louvre%2C_1818-19%29.jpg", "description": "The Raft of the Medusa – originally titled Scène de Naufrage – is an oil painting of 1818–1819 by the French Romantic painter and lithographer Théodore Géricault (1791–1824). Completed when the artist was 27, the work has become an icon of French Romanticism.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 22, "title": "Wanderer above the Sea of Fog", "artist": "Caspar David Friedrich", "year": "1818", "period": "Romanticism", "aliases": ["wanderer above the mist"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/af/Caspar_David_Friedrich_-_Wanderer_above_the_Sea_of_Fog.jpeg/3840px-Caspar_David_Friedrich_-_Wanderer_above_the_Sea_of_Fog.jpeg", "description": "Wanderer above the Sea of Fog is a painting by German Romanticist artist Caspar David Friedrich in 1818. It depicts a man standing upon a rocky precipice with his back to the viewer; he is gazing out on a landscape covered in a thick sea of fog through which other ridges, trees, and mountains pierce, which stretches out into the distance indefinitely.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 23, "title": "The Third of May 1808", "artist": "Francisco Goya", "year": "1814", "period": "Romanticism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/El_Tres_de_Mayo%2C_by_Francisco_de_Goya%2C_from_Prado_thin_black_margin.jpg/3840px-El_Tres_de_Mayo%2C_by_Francisco_de_Goya%2C_from_Prado_thin_black_margin.jpg", "description": "The Third of May 1808 in Madrid and also known, in Spanish, as El tres de mayo de 1808 en Madrid or Los fusilamientos de la montaña del Príncipe Pío, or Los fusilamientos del tres de mayo, is a painting completed in 1814 by the Spanish painter Francisco Goya, now in the Museo del Prado, Madrid. In the work, Goya sought to commemorate Spanish resistance to Napoleon's armies during the occupation of Madrid in 1808 at the start of the Peninsular War.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 24, "title": "Saturn Devouring His Son", "artist": "Francisco Goya", "year": "c. 1823", "period": "Romanticism (Black Paintings)", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/8/82/Francisco_de_Goya%2C_Saturno_devorando_a_su_hijo_%281819-1823%29.jpg", "description": "Saturn Devouring His Son is a painting by Spanish artist Francisco Goya. The work is one of the 14 so-called Black Paintings that Goya painted directly on the walls of his house some time between 1820 and 1823.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 25, "title": "The Fighting Temeraire", "artist": "J. M. W. Turner", "year": "1839", "period": "Romanticism", "aliases": ["temeraire"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/The_Fighting_Temeraire%2C_JMW_Turner%2C_National_Gallery.jpg/3840px-The_Fighting_Temeraire%2C_JMW_Turner%2C_National_Gallery.jpg", "description": "The Fighting Temeraire, tugged to her last berth to be broken up, 1838 is an oil-on-canvas painting by the English artist Joseph Mallord William Turner, painted in 1838 and exhibited at the Royal Academy in 1839.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 26, "title": "A Bar at the Folies-Bergère", "artist": "Édouard Manet", "year": "1882", "period": "Impressionism / Realism", "aliases": ["folies bergere"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/%22Un_Bar_aux_Folies-Berg%C3%A8re%22_by_%C3%89douard_Manet_%281882%29.jpg/3840px-%22Un_Bar_aux_Folies-Berg%C3%A8re%22_by_%C3%89douard_Manet_%281882%29.jpg", "description": "A Bar at the Folies-Bergère is a painting by Édouard Manet, considered to be his last major work. It was painted in 1882 and exhibited at the Paris Salon of that year.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 27, "title": "Olympia", "artist": "Édouard Manet", "year": "1863", "period": "Realism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Edouard_Manet_-_Olympia_-_Google_Art_ProjectFXD.jpg/3840px-Edouard_Manet_-_Olympia_-_Google_Art_ProjectFXD.jpg", "description": "Olympia is an 1863 oil painting by Édouard Manet, depicting a nude white woman (\"Olympia\") lying on a bed being attended to by a black maid. The French government acquired the painting in 1890 after a public subscription organized by Claude Monet.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 28, "title": "Luncheon of the Boating Party", "artist": "Pierre-Auguste Renoir", "year": "1881", "period": "Impressionism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Pierre-Auguste_Renoir_-_Luncheon_of_the_Boating_Party_-_Google_Art_Project.jpg/3840px-Pierre-Auguste_Renoir_-_Luncheon_of_the_Boating_Party_-_Google_Art_Project.jpg", "description": "Luncheon of the Boating Party is an 1880–1881 painting by French impressionist Pierre-Auguste Renoir. Exhibited at the Seventh Impressionist Exhibition in 1882, it was identified as the best painting in the show by three critics.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 29, "title": "The Card Players", "artist": "Paul Cézanne", "year": "c. 1892", "period": "Post-Impressionism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Les_Joueurs_de_cartes%2C_par_Paul_C%C3%A9zanne.jpg/3840px-Les_Joueurs_de_cartes%2C_par_Paul_C%C3%A9zanne.jpg", "description": "The Card Players is a series of oil paintings by the French Post-Impressionist artist Paul Cézanne. Painted during Cézanne's final period in the early 1890s, there are five paintings in the series.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 30, "title": "Where Do We Come From? What Are We? Where Are We Going?", "artist": "Paul Gauguin", "year": "1897", "period": "Post-Impressionism", "aliases": ["where do we come from"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Gauguin_-_Where_Do_We_Come_From%3F_What_Are_We%3F_Where_Are_We_Going%3F_%281897-98%29.jpg/3840px-Gauguin_-_Where_Do_We_Come_From%3F_What_Are_We%3F_Where_Are_We_Going%3F_%281897-98%29.jpg", "description": "Where Do We Come From? What Are We?", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 31, "title": "Wheatfield with Crows", "artist": "Vincent van Gogh", "year": "1890", "period": "Post-Impressionism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Korenveld_met_kraaien_-_s0149V1962_-_Van_Gogh_Museum.jpg/3840px-Korenveld_met_kraaien_-_s0149V1962_-_Van_Gogh_Museum.jpg", "description": "Wheatfield with Crows is a July 1890 painting by Vincent van Gogh. It has been cited by several critics as one of his greatest works.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 32, "title": "The Sleeping Gypsy", "artist": "Henri Rousseau", "year": "1897", "period": "Naïve art / Primitivism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/La_Boh%C3%A9mienne_endormie.jpg/3840px-La_Boh%C3%A9mienne_endormie.jpg", "description": "The Sleeping Gypsy is an 1897 oil on canvas painting by the French Naïve artist Henri Rousseau (1844–1910). It is a fantastical depiction of a lion musing over a sleeping woman on a moonlit night.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 33, "title": "The Tower of Babel", "artist": "Pieter Bruegel the Elder", "year": "1563", "period": "Northern Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Pieter_Bruegel_the_Elder_-_The_Tower_of_Babel_%28Vienna%29_-_Google_Art_Project_-_edited.jpg/3840px-Pieter_Bruegel_the_Elder_-_The_Tower_of_Babel_%28Vienna%29_-_Google_Art_Project_-_edited.jpg", "description": "The Tower of Babel was the subject of two surviving paintings and one lost painting by Dutch and Flemish Renaissance painter Pieter Bruegel the Elder. The earliest of the three, a miniature painted on ivory, was completed in 1552–1553 while Bruegel was in Rome, and is now lost.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 34, "title": "The Hunters in the Snow", "artist": "Pieter Bruegel the Elder", "year": "1565", "period": "Northern Renaissance", "aliases": ["hunters in the snow"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Pieter_Bruegel_the_Elder_-_Hunters_in_the_Snow_%28Winter%29_-_Google_Art_Project.jpg/3840px-Pieter_Bruegel_the_Elder_-_Hunters_in_the_Snow_%28Winter%29_-_Google_Art_Project.jpg", "description": "The Hunters in the Snow, also known as The Return of the Hunters, is a 1565 oil-on-wood painting by Pieter Bruegel the Elder. The Northern Renaissance work is one of a series of works, five of which still survive, that depict different times of the year.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 35, "title": "The Ambassadors", "artist": "Hans Holbein the Younger", "year": "1533", "period": "Northern Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Hans_Holbein_the_Younger_-_The_Ambassadors_-_Google_Art_Project.jpg/3840px-Hans_Holbein_the_Younger_-_The_Ambassadors_-_Google_Art_Project.jpg", "description": "The Ambassadors is a 1533 painting by Hans Holbein the Younger. Also known as Jean de Dinteville and Georges de Selve, after the two people it portrays, it was created in the Tudor period, in the same year Elizabeth I was born.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 36, "title": "Primavera", "artist": "Sandro Botticelli", "year": "c. 1480", "period": "Early Renaissance", "aliases": ["allegory of spring"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Botticelli-primavera.jpg/3840px-Botticelli-primavera.jpg", "description": "Primavera is a large panel painting in tempera paint by the Italian Renaissance painter Sandro Botticelli made in the late 1470s or early 1480s. It has been described as \"one of the most written about, and most controversial paintings in the world\", and also \"one of the most popular paintings in Western art\".", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 37, "title": "The School of Athens", "artist": "Raphael", "year": "1511", "period": "High Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/4/49/%22The_School_of_Athens%22_by_Raffaello_Sanzio_da_Urbino.jpg", "description": "The School of Athens is a fresco by the Italian Renaissance artist Raphael. It was painted between 1509 and 1511 as part of a commission by Pope Julius II to decorate the rooms now called the Stanze di Raffaello in the Apostolic Palace in Vatican City.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 38, "title": "Sistine Madonna", "artist": "Raphael", "year": "1512", "period": "High Renaissance", "aliases": ["cherubs"], "img": "https://upload.wikimedia.org/wikipedia/commons/7/7a/RAFAEL_-_Madonna_Sixtina_%28Gem%C3%A4ldegalerie_Alter_Meister%2C_Dresden%2C_1513-14._%C3%93leo_sobre_lienzo%2C_265_x_196_cm%29.jpg", "description": "The Sistine Madonna, also called the Madonna di San Sisto, is an oil painting by the Italian artist Raphael. The painting was commissioned in 1512 by Pope Julius II for the church of San Sisto, Piacenza, and probably executed c.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 39, "title": "Lady with an Ermine", "artist": "Leonardo da Vinci", "year": "c. 1490", "period": "High Renaissance", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Lady_with_an_Ermine_-_Leonardo_da_Vinci_%28adjusted_levels%29.jpg", "description": "The Lady with an Ermine is a portrait painting by the Italian Renaissance artist Leonardo da Vinci. Dated to c.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 40, "title": "The Anatomy Lesson of Dr Nicolaes Tulp", "artist": "Rembrandt", "year": "1632", "period": "Dutch Golden Age (Baroque)", "aliases": ["anatomy lesson"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Rembrandt_-_The_Anatomy_Lesson_of_Dr_Nicolaes_Tulp.jpg/3840px-Rembrandt_-_The_Anatomy_Lesson_of_Dr_Nicolaes_Tulp.jpg", "description": "The Anatomy Lesson of Dr. Nicolaes Tulp is a 1632 oil painting on canvas by Rembrandt housed in the Mauritshuis museum in The Hague, Netherlands.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 41, "title": "The Storm on the Sea of Galilee", "artist": "Rembrandt", "year": "1633", "period": "Dutch Golden Age (Baroque)", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/f/f3/Rembrandt_Christ_in_the_Storm_on_the_Lake_of_Galilee.jpg", "description": "Christ in the Storm on the Sea of Galilee is a 1633 oil-on-canvas painting by the Dutch Golden Age painter Rembrandt van Rijn. It is classified as a history painting and ranks among the largest and earliest of Rembrandt's works.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 42, "title": "The Milkmaid", "artist": "Johannes Vermeer", "year": "c. 1658", "period": "Dutch Golden Age (Baroque)", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Johannes_Vermeer_-_Het_melkmeisje_-_Google_Art_Project.png/3840px-Johannes_Vermeer_-_Het_melkmeisje_-_Google_Art_Project.png", "description": "The Milkmaid, sometimes called The Kitchen Maid, is an oil-on-canvas painting of a \"milkmaid\", in fact, a domestic kitchen maid, by the Dutch artist Johannes Vermeer. It is in the Rijksmuseum in Amsterdam, the Netherlands, which regards it as \"unquestionably one of the museum's finest attractions\".", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 43, "title": "The Swing", "artist": "Jean-Honoré Fragonard", "year": "1767", "period": "Rococo", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/8/83/The_Swing_%28P430%29.jpg", "description": "The Swing, also known as The Happy Accidents of the Swing, is an 18th-century oil painting by Jean-Honoré Fragonard in the Wallace Collection in London. It is considered to be one of the masterpieces of the Rococo era, and is Fragonard's best-known work.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 44, "title": "The Death of Marat", "artist": "Jacques-Louis David", "year": "1793", "period": "Neoclassicism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Death_of_Marat_by_David.jpg/3840px-Death_of_Marat_by_David.jpg", "description": "The Death of Marat is a 1793 painting by Jacques-Louis David depicting the artist's friend and murdered French revolutionary leader, Jean-Paul Marat. One of the most famous images from the era of the French Revolution, it was painted when David was the leading French Neoclassical painter, a Montagnard, and a member of the revolutionary Committee of General Security.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 45, "title": "Napoleon Crossing the Alps", "artist": "Jacques-Louis David", "year": "1801", "period": "Neoclassicism", "aliases": ["bonaparte crossing the alps"], "img": "https://upload.wikimedia.org/wikipedia/commons/f/fd/David_-_Napoleon_crossing_the_Alps_-_Malmaison2.jpg", "description": "Napoleon Crossing the Alps is a series of five oil on canvas equestrian portraits of Napoleon Bonaparte painted by the French artist Jacques-Louis David between 1801 and 1805. Initially commissioned by the King of Spain, the composition shows a strongly idealized view of the real crossing that Napoleon and his army made along the Alps through the Great St Bernard Pass in May 1800.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 46, "title": "La Grande Odalisque", "artist": "Jean-Auguste-Dominique Ingres", "year": "1814", "period": "Neoclassicism", "aliases": ["grande odalisque"], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/La_grande_odalisque_-_Jean-Auguste_Dominique_Ingres_-_Mus%C3%A9e_du_Louvre_Peintures_RF_1158.jpg/3840px-La_grande_odalisque_-_Jean-Auguste_Dominique_Ingres_-_Mus%C3%A9e_du_Louvre_Peintures_RF_1158.jpg", "description": "Grande Odalisque, also known as Une Odalisque or La Grande Odalisque, is an oil painting by Jean-Auguste-Dominique Ingres depicting an odalisque, or concubine in 1814. Ingres' contemporaries considered the work to signify Ingres' break from Neoclassicism, indicating a shift toward exotic Romanticism.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 47, "title": "The Gleaners", "artist": "Jean-François Millet", "year": "1857", "period": "Realism", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Jean-Fran%C3%A7ois_Millet_-_Gleaners_-_Google_Art_Project_2.jpg/3840px-Jean-Fran%C3%A7ois_Millet_-_Gleaners_-_Google_Art_Project_2.jpg", "description": "The Gleaners is an oil painting by Jean-François Millet completed in 1857. It is held in the Musée d'Orsay, in Paris.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 48, "title": "Ophelia", "artist": "John Everett Millais", "year": "1852", "period": "Pre-Raphaelite", "aliases": [], "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/John_Everett_Millais_-_Ophelia_-_Google_Art_Project.jpg/3840px-John_Everett_Millais_-_Ophelia_-_Google_Art_Project.jpg", "description": "Ophelia is an 1851–52 painting by British artist John Everett Millais in the collection of Tate Britain, London. It depicts the young Danish noblewoman Ophelia in William Shakespeare's play Hamlet, who, due to Hamlet's actions, loses her sanity and drowns.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}, {"id": 49, "title": "Portrait of Adele Bloch-Bauer I", "artist": "Gustav Klimt", "year": "1907", "period": "Symbolism / Art Nouveau", "aliases": ["woman in gold", "adele bloch-bauer"], "img": "https://upload.wikimedia.org/wikipedia/commons/8/84/Gustav_Klimt_046.jpg", "description": "Portrait of Adele Bloch-Bauer I is an oil painting on canvas, with gold leaf, by Gustav Klimt, completed between 1903 and 1907. The portrait was commissioned by the sitter's husband, Ferdinand Bloch-Bauer, a Viennese and Jewish banker and sugar producer.", "focal": {"x": 0.5, "y": 0.5}, "startScale": 12}];</script>
+<!-- PAINTINGS:END -->
+<script>
+(function () {
+  const MAX_POINTS = 1000;
+  const MIN_POINTS = 100;
+  const WRONG_PENALTY = 120;
+  const PINCH_SENS = 0.35;      // <1 = gentler pinch; low = fine, deliberate art-critic control
+  const ZOOM_TAP_FACTOR = 0.96; // one quick tap = a 4% stutter outward — spam-tappable
+  const ZOOM_HOLD_START = 0.85; // hold begins feather-slow (per-second scale factor)...
+  const ZOOM_HOLD_FULL  = 0.45; // ...and ramps to this full glide speed
+  const ZOOM_HOLD_RAMP  = 1.2;  // seconds of holding to reach full speed
+  const TOUCH_COST = 200;   // flat cost the moment you zoom out at all ("Smart Boys' Bonus" gate)
+  const SLIDE_CURVE = 0.75; // <1 bends the post-touch slide upward: early zoom-outs cost less
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $("stage"), art = $("art");
+  const guessInput = $("guess"), suggestions = $("suggestions"), flash = $("flash"), hint = $("hint");
+
+  let deck = [], round = 0, cur = null;
+  let scale = 7, minScaleReached = 7, penalties = 0, total = 0, activeSugg = -1;
+
+  function shuffle(a) {
+    a = a.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+
+  // remember played paintings across reloads; deal unplayed ones first
+  const SEEN_KEY = "zoomout_seen";
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(SEEN_KEY)) || []; } catch (e) {}
+  function buildDeck() {
+    let unseen = window.PAINTINGS.filter(p => !seen.includes(p.id));
+    if (!unseen.length) {  // played them all — start the cycle over
+      seen = [];
+      try { localStorage.removeItem(SEEN_KEY); } catch (e) {}
+      unseen = window.PAINTINGS.slice();
+    }
+    const rest = window.PAINTINGS.filter(p => !unseen.includes(p));
+    return shuffle(unseen).concat(shuffle(rest));
+  }
+  function markSeen(id) {
+    if (seen.includes(id)) return;
+    seen.push(id);
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) {}
+  }
+
+  function potential() {
+    const s = cur.startScale;
+    const frac = (minScaleReached - 1) / (s - 1);
+    const untouched = minScaleReached >= s - 0.01;   // never zoomed out at all
+    const fromZoom = untouched
+      ? MAX_POINTS                                   // full 1000: the Smart Boys' Bonus
+      : MIN_POINTS + (MAX_POINTS - TOUCH_COST - MIN_POINTS) * Math.pow(frac, SLIDE_CURVE);  // 800 → 100, gentle early
+    return Math.max(0, Math.round(fromZoom - penalties));
+  }
+
+  function setScale(v) {
+    scale = Math.max(1, Math.min(scale, v));  // one-way: can only zoom further out
+    art.style.setProperty("--scale", scale);
+    if (scale < minScaleReached) minScaleReached = scale;
+    $("pointsNow").textContent = potential();
+    $("zoomLvl").textContent = "×" + scale.toFixed(1);
+  }
+  function resetScale(v) {  // new round: the only way scale ever goes back up
+    scale = v; minScaleReached = v;
+    art.style.setProperty("--scale", v);
+    $("pointsNow").textContent = potential();
+    $("zoomLvl").textContent = "×" + v.toFixed(1);
+  }
+
+  function applyFocal(p) {
+    art.style.setProperty("--fx", (p.focal.x * 100) + "%");
+    art.style.setProperty("--fy", (p.focal.y * 100) + "%");
+  }
+
+  // Auto-pick a focal point on the most detailed region (highest local
+  // brightness stddev on a small probe copy). Only runs when focal is still
+  // the default center — hand-tuned values in the data always win.
+  function computeFocal(p, done) {
+    if (p._focalDone || p.focal.x !== 0.5 || p.focal.y !== 0.5) { p._focalDone = true; return done(); }
+    const probe = new Image();
+    probe.crossOrigin = "anonymous";
+    probe.onload = () => {
+      try {
+        const S = 96, G = 8, cell = S / G;
+        const c = document.createElement("canvas");
+        c.width = S; c.height = S;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(probe, 0, 0, S, S);
+        const d = ctx.getImageData(0, 0, S, S).data;
+        const SKIN_AVOID = 0.85;  // 0 = ignore skin, 1 = skin-heavy cells score ~0
+        let best = -1, bx = 0.5, by = 0.5;
+        for (let gy = 1; gy < G - 1; gy++) {        // skip outer ring: keep the
+          for (let gx = 1; gx < G - 1; gx++) {      // focal away from the frame
+            let sum = 0, sum2 = 0, skin = 0;
+            for (let y = gy * cell; y < (gy + 1) * cell; y++) {
+              for (let x = gx * cell; x < (gx + 1) * cell; x++) {
+                const i = (y * S + x) * 4;
+                const r = d[i], g = d[i + 1], b = d[i + 2];
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                sum += lum; sum2 += lum * lum;
+                // crude flesh-tone test: warm, red-dominant, not grey
+                if (r > 95 && g > 40 && b > 20 && r > g && r > b &&
+                    (r - Math.min(g, b)) > 15 && Math.abs(r - g) > 15) skin++;
+              }
+            }
+            const n = cell * cell;
+            const sd = Math.sqrt(Math.max(0, sum2 / n - (sum / n) ** 2));
+            const score = sd * (1 - SKIN_AVOID * (skin / n));  // detail wins, faces lose
+            if (score > best) { best = score; bx = (gx + 0.5) / G; by = (gy + 0.5) / G; }
+          }
+        }
+        p.focal = { x: bx, y: by };
+      } catch (e) { /* CORS-tainted canvas etc. — keep center */ }
+      p._focalDone = true; done();
+    };
+    probe.onerror = () => { p._focalDone = true; done(); };
+    // small copy: fast to fetch & scan. Original-file URLs (no NNNpx- segment)
+    // get rewritten onto Wikimedia's thumb path instead of downloading megabytes.
+    probe.src = /\/\d+px-/.test(p.img)
+      ? p.img.replace(/\/\d+px-/, "/320px-")
+      : p.img.replace(/\/commons\/(\w)\/(\w\w)\/([^\/]+)$/, "/commons/thumb/$1/$2/$3/320px-$3");
+  }
+
+  function startRound() {
+    cur = deck[round];
+    penalties = 0;
+    $("roundNo").textContent = round + 1;
+    art.src = cur.img;
+    applyFocal(cur);
+    computeFocal(cur, () => { if (cur === deck[round]) applyFocal(cur); });
+    if (deck[round + 1]) computeFocal(deck[round + 1], () => {});  // prefetch next round's
+    resetScale(cur.startScale);
+    guessInput.value = ""; guessInput.disabled = false;
+    document.querySelector("main").classList.remove("solving", "typing");
+    setFlash(""); hideSuggestions(); hint.style.display = "";
+  }
+
+  function setFlash(msg, kind) { flash.textContent = msg; flash.className = "flash" + (kind ? " " + kind : ""); }
+
+  // ---- autocomplete ----
+  function matches(q) {
+    q = q.trim().toLowerCase();
+    if (!q) return [];
+    return window.PAINTINGS.filter(p =>
+      p.title.toLowerCase().includes(q) ||
+      p.artist.toLowerCase().includes(q) ||
+      (p.aliases || []).some(a => a.includes(q))
+    ).slice(0, 8);
+  }
+  function renderSuggestions() {
+    const list = matches(guessInput.value);
+    if (!list.length) { hideSuggestions(); return; }
+    suggestions.innerHTML = list.map((p, i) =>
+      `<div class="item${i === activeSugg ? " active" : ""}" data-id="${p.id}">${p.title} <small>· ${p.artist}</small></div>`
+    ).join("");
+    suggestions.hidden = false;
+    suggestions.querySelectorAll(".item").forEach(el =>
+      el.addEventListener("pointerdown", (e) => { e.preventDefault(); submitGuess(parseInt(el.dataset.id, 10)); })
+    );
+  }
+  function hideSuggestions() { suggestions.hidden = true; activeSugg = -1; }
+
+  function submitGuess(id) {
+    if (guessInput.disabled) return;
+    if (id === cur.id) { endRound(potential(), true); return; }
+    penalties += WRONG_PENALTY;
+    const wrong = window.PAINTINGS.find(p => p.id === id);
+    setFlash(`Not “${wrong.title}”. −${WRONG_PENALTY}`, "bad");
+    $("pointsNow").textContent = potential();
+    guessInput.value = ""; hideSuggestions();
+  }
+
+  function endRound(earned, won) {
+    guessInput.disabled = true; guessInput.blur(); hideSuggestions();
+    markSeen(cur.id);
+    total += earned; $("total").textContent = total;
+    $("revealImg").src = cur.img;
+    $("revealTitle").textContent = cur.title;
+    $("revealBy").textContent = `${cur.artist} · ${cur.year}`;
+    $("revealPeriod").textContent = cur.period || "";
+    $("revealDesc").textContent = cur.description || "";
+    const e = $("revealEarned");
+    e.textContent = (won ? "+" : "") + earned + " points";
+    e.className = "earned" + (earned === 0 ? " zero" : "");
+    $("nextBtn").textContent = (round + 1 < deck.length) ? "Next painting →" : "See final score";
+    $("reveal").classList.add("show");
+  }
+
+  function next() {
+    $("reveal").classList.remove("show");
+    round++;
+    if (round < deck.length) { startRound(); return; }
+    $("revealImg").removeAttribute("src");
+    $("revealTitle").textContent = "Done!";
+    $("revealBy").textContent = `You scored ${total} across ${deck.length} paintings.`;
+    $("revealPeriod").textContent = "";
+    $("revealDesc").textContent = "";
+    $("revealEarned").textContent = "";
+    $("nextBtn").textContent = "Play again";
+    $("reveal").classList.add("show");
+    deck = buildDeck(); round = -1;
+  }
+
+  // ---- touch / pointer zoom ----
+  const pointers = new Map();
+  let pinchStartDist = 0, pinchStartScale = 0;
+
+  function dist() {
+    const p = [...pointers.values()];
+    return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+  }
+  stage.addEventListener("pointerdown", (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) { pinchStartDist = dist(); pinchStartScale = scale; }
+    hint.style.display = "none";
+  });
+  stage.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2 && pinchStartDist > 0) {
+      e.preventDefault();
+      setScale(pinchStartScale * Math.pow(dist() / pinchStartDist, PINCH_SENS));
+    }
+  });
+  function dropPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchStartDist = 0;
+  }
+  stage.addEventListener("pointerup", dropPointer);
+  stage.addEventListener("pointercancel", dropPointer);
+  stage.addEventListener("pointerleave", dropPointer);
+
+  // hold = fluid continuous zoom-out; quick tap = small nudge
+  const zoomBtn = $("zoomout");
+  let rafId = null, lastT = 0, holdStart = 0;
+  function holdLoop(t) {
+    if (lastT) {
+      const ramp = Math.min(1, ((t - holdStart) / 1000) / ZOOM_HOLD_RAMP);
+      const speed = ZOOM_HOLD_START + (ZOOM_HOLD_FULL - ZOOM_HOLD_START) * ramp;
+      setScale(scale * Math.pow(speed, (t - lastT) / 1000));
+    }
+    lastT = t;
+    rafId = requestAnimationFrame(holdLoop);
+  }
+  zoomBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    zoomBtn.setPointerCapture(e.pointerId);
+    holdStart = performance.now(); lastT = 0;
+    rafId = requestAnimationFrame(holdLoop);
+  });
+  function endHold() {
+    if (rafId === null) return;
+    cancelAnimationFrame(rafId); rafId = null;
+    if (performance.now() - holdStart < 200) setScale(scale * ZOOM_TAP_FACTOR);
+  }
+  zoomBtn.addEventListener("pointerup", endHold);
+  zoomBtn.addEventListener("pointercancel", endHold);
+
+  stage.addEventListener("wheel", (e) => {  // desktop convenience (outward only)
+    e.preventDefault();
+    if (e.deltaY > 0) setScale(scale - 0.25);
+  }, { passive: false });
+
+  // iOS Safari ignores user-scalable=no: stop it hijacking the pinch for page zoom
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
+  stage.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+  // ---- text input ----
+  guessInput.addEventListener("input", () => { activeSugg = -1; renderSuggestions(); });
+  guessInput.addEventListener("keydown", (e) => {
+    const n = suggestions.hidden ? 0 : suggestions.querySelectorAll(".item").length;
+    if (e.key === "ArrowDown") { e.preventDefault(); activeSugg = Math.min(n - 1, activeSugg + 1); renderSuggestions(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); activeSugg = Math.max(0, activeSugg - 1); renderSuggestions(); }
+    else if (e.key === "Enter") {
+      const list = matches(guessInput.value); if (!list.length) return;
+      submitGuess((activeSugg >= 0 ? list[activeSugg] : list[0]).id);
+    } else if (e.key === "Escape") hideSuggestions();
+  });
+  guessInput.addEventListener("blur", () => setTimeout(hideSuggestions, 150));
+
+  $("giveup").addEventListener("click", () => endRound(0, false));
+  $("nextBtn").addEventListener("click", next);
+
+  // ---- keyboard-aware panel: lift by the keyboard's height, no more ----
+  const vv = window.visualViewport;
+  function vvUpdate() {
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty("--kb", kb + "px");
+  }
+  if (vv) { vv.addEventListener("resize", vvUpdate); vv.addEventListener("scroll", vvUpdate); }
+
+  const mainEl = document.querySelector("main");
+  guessInput.addEventListener("focus", () => mainEl.classList.add("typing"));
+  guessInput.addEventListener("blur", () => {
+    mainEl.classList.remove("typing");
+    setTimeout(() => mainEl.classList.remove("solving"), 150);  // back to the three buttons
+  });
+  $("solve").addEventListener("click", () => {
+    if (guessInput.disabled) return;
+    mainEl.classList.add("solving");
+    guessInput.focus();  // inside the tap handler, so the phone keyboard opens
+  });
+
+  // ---- tap the painting to toggle the chrome (zen view) ----
+  let tapCand = null, wasPinch = false;
+  stage.addEventListener("pointerdown", (e) => {
+    if (pointers.size === 1) { tapCand = { x: e.clientX, y: e.clientY, t: performance.now() }; wasPinch = false; }
+    else { tapCand = null; wasPinch = true; }  // second finger: this gesture is a pinch
+  });
+  stage.addEventListener("pointermove", (e) => {
+    if (pointers.size > 1) { wasPinch = true; tapCand = null; }
+    if (tapCand && (Math.abs(e.clientX - tapCand.x) > 12 || Math.abs(e.clientY - tapCand.y) > 12)) tapCand = null;
+  });
+  stage.addEventListener("pointerup", () => {
+    if (tapCand && !wasPinch && performance.now() - tapCand.t < 350) {
+      guessInput.blur();
+      document.body.classList.toggle("zen");
+    }
+    tapCand = null;
+  });
+  stage.addEventListener("pointercancel", () => { tapCand = null; });
+  $("showui").addEventListener("click", () => document.body.classList.remove("zen"));
+
+  // ---- boot ----
+  if (!window.PAINTINGS || !window.PAINTINGS.length) {
+    document.querySelector("main").innerHTML = "<p style='color:var(--bad);padding:20px'>No paintings loaded.</p>";
+    return;
+  }
+  deck = buildDeck();
+  $("roundTot").textContent = deck.length;
+  startRound();
+})();
+</script>
+</body>
+</html>
