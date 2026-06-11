@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- ZoomOut app icon: a detail at center, zoom-out rings expanding, the blue − badge -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#0f1012"/>
+  <rect x="6" y="6" width="500" height="500" rx="108" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="6"/>
+
+  <!-- zoom-out rings, fading as they grow -->
+  <rect x="106" y="86" width="300" height="300" rx="46" fill="none" stroke="#ffffff" stroke-opacity="0.20" stroke-width="12"/>
+  <rect x="146" y="126" width="220" height="220" rx="34" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="12"/>
+  <rect x="186" y="166" width="140" height="140" rx="22" fill="none" stroke="#ffffff" stroke-opacity="0.75" stroke-width="12"/>
+
+  <!-- the detail you start on -->
+  <rect x="227" y="207" width="58" height="58" rx="12" fill="#ffffff"/>
+
+  <!-- blue zoom-out badge -->
+  <circle cx="368" cy="398" r="66" fill="#4084ff" stroke="rgba(255,255,255,0.35)" stroke-width="6"/>
+  <rect x="334" y="389" width="68" height="18" rx="9" fill="#0f1012"/>
+</svg>
