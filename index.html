@@ -1,81 +1,96 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>ZoomOut — guess the painting</title>
+<title>ZEIT Bilderkennung</title>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-512.png">
 <style>
+  /* Farben Pixel für Pixel aus einem Screenshot der ZEIT-App (Dark Mode) gemessen —
+     nicht geschätzt. Auffällig: die Grautöne sind exakt neutral (R=G=B), kein
+     Blaustich, und der Grund ist #111 statt reinem Schwarz. */
   :root {
-    --bg: #0f1012;
-    --panel: #1a1c1f;
-    --ink: #e9eaec;
-    --muted: #989ca3;
-    --line: #2a2d31;
-    --line-strong: #33363b;
-    --accent: #ffffff;
-    --accent-ink: #15161a;
-    --good: #ffffff;
-    --bad: #aeb2b7;
+    --bg: #111111;        /* Grundfläche */
+    --card: #212121;      /* Karten wie die Ergebnis-Box in der App */
+    --pill: #1F1F1F;      /* die schwebende Tab-Leiste */
+    --ink: #F5F6F6;       /* Text */
+    --muted: #949494;     /* Dachzeilen, Sekundärtext */
+    --line: #2C2C2C;      /* Trennlinien und Rahmen */
+    --accent: #E0352F;    /* ZEIT-Rot, gemessen am Z+-Badge. Signalfarbe, sonst nichts */
+    --edge: 16px;         /* Seitenrand der App */
+
+    /* Die echten Hausschriften (Tablet Gothic für Headlines/UI, FF Franziska für
+       Fließtext) sind Kaufschriften. Nächste Näherung, die auf Mac UND iPhone
+       vorinstalliert ist — so bleibt die Datei eigenständig und lädt nichts nach. */
+    --font-head: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-text: Charter, "Iowan Old Style", Georgia, serif;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; overscroll-behavior: none; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.4 "Iowan Old Style", "Palatino", Georgia, serif;
+    font: 16px/1.4 var(--font-text);
     height: 100dvh; overflow: hidden;
     -webkit-user-select: none; user-select: none;
   }
 
-  /* frosted-glass chrome floating over the full-screen painting */
-  .glass {
-    background: rgba(20, 22, 26, 0.45);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
-    backdrop-filter: blur(20px) saturate(140%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  /* Der Kern der ZEIT-Anmutung: fett, eng gesetzt, echte Silbentrennung.
+     Ohne lang="de" am <html> trennt Safari nach englischen Regeln. */
+  .head {
+    font-family: var(--font-head); font-weight: 700;
+    letter-spacing: -0.02em; line-height: 1.05;
+    hyphens: auto; -webkit-hyphens: auto;
   }
 
+  /* Kopf wie in der App: randloser Balken über die volle Breite, Haarlinie unten —
+     keine schwebende Karte, kein Milchglas */
   header {
     position: fixed; z-index: 2;
-    top: calc(10px + env(safe-area-inset-top));
-    left: 12px; right: 12px;
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 16px; border-radius: 16px;
+    top: 0; left: 0; right: 0;
+    padding: calc(10px + env(safe-area-inset-top)) var(--edge) 10px;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--bg); border-bottom: 1px solid var(--line);
   }
-  header h1 { font-size: 15px; margin: 0; letter-spacing: 0.5px; }
-  header .meta { display: flex; flex-direction: column; line-height: 1.3; }
-  header .sub { font-size: 11px; color: var(--muted); }
-  header .sub b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .ptsbox { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
-  #pointsNow { font-size: 28px; font-weight: normal;
-    font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
-  #zoomLvl { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  header .meta { display: flex; flex-direction: column; gap: 2px; }
+  /* Der echte ZEIT-Schriftzug ist eine Individualschrift des Verlags und nicht
+     nachbaubar. Nur die Anmutung: Antiqua-Versalien, daneben die Grotesk. */
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; line-height: 1; }
+  header h1 .zeit { font-family: var(--font-text); letter-spacing: 0.14em; }
+  header h1 .game { font-family: var(--font-head); font-weight: 700; letter-spacing: -0.01em; }
+  header .sub { font-size: 11px; font-family: var(--font-head); color: var(--muted); }
+  header .sub b { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .ptsbox { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  #pointsNow { font-family: var(--font-head); font-size: 30px; font-weight: 700;
+    line-height: 0.9; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  #zoomLvl { font-size: 11px; font-family: var(--font-head); color: var(--muted);
+    font-variant-numeric: tabular-nums; }
 
   main {
     position: fixed; z-index: 2;
-    left: 12px; right: 12px;
-    bottom: calc(16px + env(safe-area-inset-bottom) + var(--kb, 0px));
-    display: flex; flex-direction: column; gap: 12px;
+    left: var(--edge); right: var(--edge);
+    bottom: calc(10px + env(safe-area-inset-bottom) + var(--kb, 0px));
+    display: flex; flex-direction: column; gap: 10px;
     pointer-events: none;  /* no panel: let touches reach the painting between controls */
   }
-  main .guessbar, main .row button { pointer-events: auto; }
+  main .guessbar, main .tabbar { pointer-events: auto; }
   /* while typing, collapse to input + feedback so keyboard + chrome leave the painting visible */
-  main.typing .row { display: none; }
+  main.typing .tabbar { display: none; }
 
   /* zen view: swipe the chrome away to study the painting */
   header, main { transition: transform 0.28s ease; }
-  body.zen header { transform: translateY(calc(-100% - 24px)); }
+  body.zen header { transform: translateY(-100%); }
   body.zen main { transform: translateY(calc(100% + 48px)); }
   #showui {
     position: fixed; z-index: 3; left: 50%;
     bottom: calc(10px + env(safe-area-inset-bottom));
     transform: translateX(-50%) translateY(250%);  /* parked off-screen */
-    width: 56px; height: 34px; padding: 0; flex: none;
-    border-radius: 999px; font-size: 15px; color: var(--ink);
+    width: 60px; height: 36px; padding: 0; flex: none;
+    background: var(--pill); border: 1px solid var(--line);
+    border-radius: 999px; color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
     transition: transform 0.28s ease;
   }
   body.zen #showui { transform: translateX(-50%) translateY(0); }
@@ -105,93 +120,118 @@
   main.solving .guessbar { display: block; }
   .guessbar input[type=text] {
     width: 100%; padding: 14px 16px; font: inherit; font-size: 17px;
-    background: rgba(20,22,26,0.6); color: var(--ink);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
-    backdrop-filter: blur(20px) saturate(140%);
-    border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; -webkit-user-select: text; user-select: text;
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px;
+    -webkit-user-select: text; user-select: text;
   }
   .guessbar input[type=text]::placeholder { color: var(--muted); }
-  .guessbar input[type=text]:focus { outline: none; border-color: rgba(255,255,255,0.45); }
+  .guessbar input[type=text]:focus { outline: none; border-color: var(--muted); }
 
+  /* Vorschlagsliste wie eine App-Liste: flach, dunkel, Haarlinien statt Milchglas */
   .suggestions {
     position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
-    background: rgba(20,22,26,0.7);
-    -webkit-backdrop-filter: blur(24px) saturate(140%);
-    backdrop-filter: blur(24px) saturate(140%);
-    border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
     overflow: hidden; z-index: 5; max-height: 40vh; overflow-y: auto;
-    box-shadow: 0 -8px 24px rgba(0,0,0,0.5);
   }
-  .suggestions .item { padding: 13px 16px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .suggestions .item {
+    padding: 13px 16px; cursor: pointer; border-bottom: 1px solid var(--line);
+    font-family: var(--font-head); font-size: 15px;
+  }
   .suggestions .item:last-child { border-bottom: none; }
   .suggestions .item small { color: var(--muted); }
-  .suggestions .item.active { background: rgba(255,255,255,0.1); }
+  .suggestions .item.active { background: #2A2A2A; }
 
-  .row { display: flex; justify-content: center; align-items: center; gap: 28px; flex: 0 0 auto; }
-  .row button {
-    width: 72px; height: 72px; flex: none; padding: 0;
-    border-radius: 50%; font-size: 30px; line-height: 1;
-    display: flex; align-items: center; justify-content: center;
-    -webkit-backdrop-filter: blur(16px) saturate(140%);
-    backdrop-filter: blur(16px) saturate(140%);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  /* Die Bedienleiste ist die Tab-Pille der ZEIT-App — dieselbe Leiste, in der in der
+     App „Spiele“ steht. Zoom bekommt den doppelten Anteil: er ist der
+     Haupt-Interaktionspunkt und muss im Gehen zielbar bleiben. */
+  .tabbar {
+    display: flex; align-items: stretch; flex: 0 0 auto; padding: 5px;
+    background: var(--pill); border: 1px solid var(--line); border-radius: 999px;
+  }
+  .tabbar button {
+    flex: 1; padding: 7px 4px; border: none; border-radius: 999px;
+    background: none; color: var(--muted); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-family: var(--font-head); font-size: 11px; letter-spacing: 0.01em;
     touch-action: manipulation;
   }
-  #zoomout { background: rgba(64, 132, 255, 0.30); border-color: rgba(120, 170, 255, 0.5); color: #dce9ff; }
-  #solve   { background: rgba(52, 190, 120, 0.28); border-color: rgba(110, 220, 160, 0.45); color: #d7f7e6; }
-  #giveup  { background: rgba(235, 75, 65, 0.28);  border-color: rgba(255, 125, 115, 0.45); color: #ffdbd6; }
+  .tabbar button svg { width: 22px; height: 22px; display: block; }
+  #zoomout { flex: 2; color: var(--ink); }
+  /* die einzige Stelle, an der die Signalfarbe im Spiel auftaucht */
+  #zoomout.holding { background: var(--accent); color: #fff; }
+
   button {
-    padding: 13px 16px; font: inherit; font-size: 15px; cursor: pointer;
-    background: rgba(255,255,255,0.07); color: var(--ink);
-    border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; flex: 1;
+    padding: 13px 16px; font: inherit; font-family: var(--font-head); font-size: 15px;
+    cursor: pointer; background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; flex: 1;
   }
-  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
+  button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
 
-  .flash { min-height: 20px; font-size: 14px; text-align: center; flex: 0 0 auto;
+  .flash { min-height: 18px; font-size: 13px; text-align: center; flex: 0 0 auto;
+    font-family: var(--font-head);
     text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
-  .flash.bad { color: var(--bad); }
-  .flash.good { color: var(--good); }
+  .flash.bad { color: var(--muted); }
+  .flash.good { color: var(--ink); }
 
+  /* Die Auflösung wird als ZEIT-Artikel gesetzt: randloses Aufmacherbild, rotes
+     Ressort-Label, fette enge Grotesk-Headline, graue Dachzeile, Antiqua-Fließtext. */
   .reveal {
-    position: fixed; inset: 0; background: rgba(8,9,11,0.6);
-    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-    display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px;
   }
   .reveal.show { display: flex; }
   .reveal .card {
-    background: rgba(22,24,28,0.7);
-    -webkit-backdrop-filter: blur(24px) saturate(140%);
-    backdrop-filter: blur(24px) saturate(140%);
-    border: 1px solid rgba(255,255,255,0.12); border-radius: 18px;
-    padding: 22px; max-width: 440px; width: 100%; text-align: center;
-    max-height: 90vh; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    max-width: 440px; width: 100%; max-height: 92vh; overflow-y: auto;
+    text-align: left;
   }
-  .reveal .card img { max-width: 100%; max-height: 34vh; border-radius: 6px; margin-bottom: 16px; }
-  .reveal .card h2 { margin: 0 0 4px; font-size: 22px; }
-  .reveal .card .by { color: var(--muted); margin-bottom: 4px; }
+  .reveal .card img {
+    display: block; width: 100%; max-height: 32vh; object-fit: cover;
+    border-radius: 7px 7px 0 0; margin: 0;
+  }
+  .reveal .card img[src=""], .reveal .card img:not([src]) { display: none; }
+  .artbody { padding: 16px var(--edge) var(--edge); }
+  /* an der Stelle, an der in der App „Z+ Volkswagen-Krise“ steht */
   .reveal .card .period {
-    display: inline-block; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;
-    color: var(--accent); border: 1px solid #3a3f47; border-radius: 999px;
-    padding: 3px 12px; margin-bottom: 12px;
+    font-family: var(--font-head); font-weight: 700; font-size: 14px;
+    color: var(--accent); margin-bottom: 6px;
   }
-  .reveal .card .desc { font-size: 14px; line-height: 1.5; color: #c5c9ce; margin: 0 0 14px; text-align: left; }
-  .reveal .card .earned { font-size: 30px; color: var(--accent); margin: 6px 0 18px;
+  .reveal .card .period:empty { display: none; }
+  .reveal .card h2 { margin: 0 0 8px; font-size: 27px; }
+  .reveal .card .by {
+    font-family: var(--font-head); font-size: 14px; color: var(--muted); margin-bottom: 14px;
+  }
+  .reveal .card .desc {
+    font-family: var(--font-text); font-size: 15px; line-height: 1.5;
+    color: var(--ink); margin: 0 0 16px;
+  }
+  .reveal .card .desc:empty { display: none; }
+  /* Punktekasten im Stil der Ergebnis-Box aus der App */
+  .scorebox {
+    display: flex; align-items: baseline; justify-content: space-between;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px var(--edge); margin-bottom: 14px;
+    font-family: var(--font-head);
+  }
+  .scorebox .label { font-size: 14px; color: var(--muted); }
+  .scorebox .earned { font-size: 26px; font-weight: 700; letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums; }
-  .reveal .card .earned.zero { color: var(--bad); }
+  .scorebox .earned.zero { color: var(--muted); }
+  .scorebox:has(.earned:empty) { display: none; }
   .reveal .card button { width: 100%; }
 </style>
 </head>
 <body>
 <div class="stage" id="stage">
-  <img id="art" alt="mystery painting">
+  <img id="art" alt="Gemälde-Ausschnitt">
   <div class="vignette"></div>
-  <div class="hint" id="hint">hold “Zoom out” to reveal more — there's no going back</div>
+  <div class="hint" id="hint">„Zoom“ halten, um mehr aufzudecken — zurück geht es nicht</div>
 </div>
 
-<header class="glass">
+<header>
   <div class="meta">
-    <h1>ZoomOut</h1>
-    <span class="sub">#<b id="roundNo">1</b>/<b id="roundTot">?</b> · total <b id="total">0</b></span>
+    <h1><span class="zeit">ZEIT</span> <span class="game">Bilderkennung</span></h1>
+    <span class="sub">Bild <b id="roundNo">1</b>/<b id="roundTot">?</b> · Gesamt <b id="total">0</b></span>
   </div>
   <div class="ptsbox">
     <b id="pointsNow">1000</b>
@@ -201,31 +241,55 @@
 
 <main>
   <div class="guessbar">
-    <input type="text" id="guess" placeholder="Name the painting…" autocomplete="off"
+    <input type="text" id="guess" placeholder="Bild oder Künstler eingeben…" autocomplete="off"
            autocorrect="off" autocapitalize="off" spellcheck="false">
     <div class="suggestions" id="suggestions" hidden></div>
   </div>
 
   <div class="flash" id="flash"></div>
 
-  <div class="row">
-    <button id="zoomout" aria-label="zoom out">−</button>
-    <button id="solve" aria-label="solve">✓</button>
-    <button id="giveup" aria-label="give up">✕</button>
-  </div>
+  <nav class="tabbar">
+    <button id="giveup" aria-label="Aufgeben">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+      Aufgeben
+    </button>
+    <button id="zoomout" aria-label="Herauszoomen, gedrückt halten">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M7.5 10.5h6"/>
+      </svg>
+      Zoom
+    </button>
+    <button id="solve" aria-label="Raten">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 12.5l5 5L20 6.5"/>
+      </svg>
+      Raten
+    </button>
+  </nav>
 </main>
 
-<button id="showui" class="glass" aria-label="show controls">⌃</button>
+<button id="showui" aria-label="Bedienung einblenden">
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M6 15l6-6 6 6"/>
+  </svg>
+</button>
 
 <div class="reveal" id="reveal">
   <div class="card">
     <img id="revealImg" alt="">
-    <h2 id="revealTitle"></h2>
-    <div class="by" id="revealBy"></div>
-    <div class="period" id="revealPeriod"></div>
-    <p class="desc" id="revealDesc"></p>
-    <div class="earned" id="revealEarned"></div>
-    <button class="primary" id="nextBtn">Next painting →</button>
+    <div class="artbody">
+      <div class="period" id="revealPeriod"></div>
+      <h2 class="head" id="revealTitle" lang="en"></h2>
+      <div class="by" id="revealBy"></div>
+      <p class="desc" id="revealDesc"></p>
+      <div class="scorebox">
+        <span class="label">Punkte</span>
+        <b class="earned" id="revealEarned"></b>
+      </div>
+      <button class="primary" id="nextBtn">Nächstes Bild</button>
+    </div>
   </div>
 </div>
 
@@ -423,9 +487,9 @@
     $("revealPeriod").textContent = cur.period || "";
     $("revealDesc").textContent = cur.description || "";
     const e = $("revealEarned");
-    e.textContent = (won ? "+" : "") + earned + " points";
+    e.textContent = (won ? "+" : "") + earned;
     e.className = "earned" + (earned === 0 ? " zero" : "");
-    $("nextBtn").textContent = (round + 1 < deck.length) ? "Next painting →" : "See final score";
+    $("nextBtn").textContent = (round + 1 < deck.length) ? "Nächstes Bild" : "Endstand ansehen";
     $("reveal").classList.add("show");
   }
 
@@ -434,12 +498,12 @@
     round++;
     if (round < deck.length) { startRound(); return; }
     $("revealImg").removeAttribute("src");
-    $("revealTitle").textContent = "Done!";
-    $("revealBy").textContent = `You scored ${total} across ${deck.length} paintings.`;
+    $("revealTitle").textContent = "Geschafft!";
+    $("revealBy").textContent = `${total} Punkte bei ${deck.length} Bildern.`;
     $("revealPeriod").textContent = "";
     $("revealDesc").textContent = "";
     $("revealEarned").textContent = "";
-    $("nextBtn").textContent = "Play again";
+    $("nextBtn").textContent = "Noch einmal spielen";
     $("reveal").classList.add("show");
     deck = buildDeck(); round = -1;
   }
@@ -591,7 +655,7 @@
 
   // ---- boot ----
   if (!window.PAINTINGS || !window.PAINTINGS.length) {
-    document.querySelector("main").innerHTML = "<p style='color:var(--bad);padding:20px'>No paintings loaded.</p>";
+    document.querySelector("main").innerHTML = "<p style='color:var(--muted);padding:20px'>Keine Bilder geladen.</p>";
     return;
   }
   deck = buildDeck();
