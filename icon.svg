@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- ZEIT Bilderkennung: ein Detail in der Mitte, Zoom-Rahmen nach außen, rotes Zoom-Badge.
-       Farben aus der ZEIT-App gemessen: Grund #111111, Linie #2C2C2C, Signalrot #E0352F -->
+  <!-- App-Icon: ein Detail in der Mitte, Zoom-Rahmen nach außen, rotes Zoom-Badge.
+       Farben aus der Vorlage-App gemessen: Grund #111111, Linie #2C2C2C, Signalrot #E0352F -->
   <rect x="0" y="0" width="512" height="512" rx="112" fill="#111111"/>
   <rect x="6" y="6" width="500" height="500" rx="108" fill="none" stroke="#2C2C2C" stroke-width="6"/>
 

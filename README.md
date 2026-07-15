@@ -1,4 +1,4 @@
-# ZEIT Bilderkennung
+# ZoomOut
 
 Errate das Gemälde. Du startest tief in ein berühmtes Bild gezoomt — jeder
 Zoom-Schritt nach außen kostet Punkte, jeder Fehltipp auch. Wer ohne einen
@@ -7,6 +7,11 @@ einzigen Zoom richtig rät, nimmt die vollen 1000.
 Ein Einzeldatei-Webspiel, mobile-first: `index.html` in einem beliebigen Browser
 öffnen und spielen. Kein Build, kein Server, keine Abhängigkeiten.
 
+> Privates Gestaltungs-Mockup, kein Produkt und keine Veröffentlichung eines
+> Verlags. Die Oberfläche ist bewusst dem Dark Mode einer Nachrichten-App
+> nachempfunden — als Fingerübung, wie sich ein Spiel in eine solche Umgebung
+> einfügen würde.
+
 ## Wie es funktioniert
 
 - 50 berühmte gemeinfreie Gemälde, Bilder direkt von Wikimedia Commons geladen.
@@ -14,6 +19,7 @@ Ein Einzeldatei-Webspiel, mobile-first: `index.html` in einem beliebigen Browser
   Richtung: zurück geht es nicht. **Raten** öffnet das Eingabefeld
   (Vorschläge über Titel und Künstler), **Aufgeben** beendet die Runde.
 - Von ×12 auf Vollbild sind es rund 9 Sekunden Halten.
+- Auf das Bild tippen blendet die Bedienung aus, wenn du einfach nur schauen willst.
 
 ## Die Punkte
 
@@ -34,28 +40,40 @@ Ein Einzeldatei-Webspiel, mobile-first: `index.html` in einem beliebigen Browser
 - **Fehltipp** kostet 15 % des aktuellen Standes — sticht immer gleich stark,
   ruiniert aber nie eine Runde.
 
-Auf das Bild tippen blendet die Bedienung aus, wenn du einfach nur schauen willst.
+## Sprache und Daten
+
+Oberfläche, Titel, Epochen und Infotexte sind deutsch. Die englischen Titel
+bleiben als unsichtbare Suchhilfe erhalten: Wer „The Scream" tippt, findet
+„Der Schrei".
+
+Die Infotexte stammen aus der deutschen Wikipedia. Vier Gemälde haben dort
+keinen eigenen Artikel — sie kommen nur in Sammelartikeln vor — und tragen
+deshalb eine von Hand eingetragene Übersetzung der englischen Zusammenfassung
+(siehe `DESC_DE` in `generate.py`). Nichts davon wird zur Laufzeit übersetzt:
+Das Spiel kommt ohne Dienste aus.
 
 ## Gestaltung
 
-Oberfläche auf Deutsch, Gemäldedaten englisch (Originaltitel, englische
-Wikipedia-Beschreibungen).
+Die Farben sind aus einem Screenshot der Vorlage-App Pixel für Pixel gemessen,
+nicht geschätzt: Grund `#111111`, Karten `#212121`, Linien `#2C2C2C`, Text
+`#F5F6F6`, Signalrot `#E0352F`. Die Grautöne sind exakt neutral.
 
-Die Farben sind aus einem Screenshot der ZEIT-App (Dark Mode) Pixel für Pixel
-gemessen, nicht geschätzt: Grund `#111111`, Karten `#212121`, Linien `#2C2C2C`,
-Text `#F5F6F6`, Signalrot `#E0352F`. Die Hausschriften der ZEIT (Tablet Gothic,
-FF Franziska) sind Kaufschriften und hier nicht verwendet — stattdessen die
-nächste Näherung, die auf Mac und iPhone vorinstalliert ist: Helvetica Neue für
-Headlines und Oberfläche, Charter für Fließtext. So bleibt das Spiel eine
-eigenständige Datei, die nichts nachlädt.
+Die Hausschriften der Vorlage sind Kaufschriften und hier nicht verwendet —
+stattdessen die nächste Näherung, die auf Mac und iPhone vorinstalliert ist:
+Helvetica Neue für Headlines und Oberfläche, Charter für Fließtext. So bleibt
+das Spiel eine eigenständige Datei, die nichts nachlädt.
+
+Die Auflösung ist als Ergebnis gebaut, nicht als Artikel: Bild (immer
+vollständig, egal welches Format), Titel, Datenzeile, Punktekasten, Infotext.
 
 ## Entwicklung
 
-`generate.py` (Python 3, nur Standardbibliothek) frischt die Gemäldedaten auf:
-Es löst Bild-URLs und zweisätzige Beschreibungen über Wikipedia auf und schreibt
-sie in `index.html` zwischen die Marken `PAINTINGS:START/END`. Die Liste `CURATED`
-bestimmt das Feld. Ein erneuter Lauf erhält von Hand gesetzte `focal`- und
-`startScale`-Werte. Das Spiel selbst braucht kein Python.
+`generate.py` (Python 3, nur Standardbibliothek) frischt die Gemäldedaten auf
+und schreibt sie in `index.html` zwischen die Marken `PAINTINGS:START/END`.
+Die Liste `CURATED` bestimmt das Feld; jede Zeile nennt zwei Wikipedia-Artikel:
+den englischen (liefert das Bild) und den deutschen (liefert den Text). Ein
+erneuter Lauf erhält von Hand gesetzte `focal`- und `startScale`-Werte, gematcht
+über den Anzeigetitel. Das Spiel selbst braucht kein Python.
 
 Alle Gemälde sind gemeinfrei; die Beschreibungen stammen aus der Wikipedia
-(CC BY-SA).
+(CC BY-SA), die vier Übersetzungen sind Bearbeitungen davon.
