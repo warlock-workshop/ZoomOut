@@ -1,30 +1,61 @@
-# ZoomOut
+# ZEIT Bilderkennung
 
-Guess the painting. You start zoomed deep into a famous artwork — every zoom-out
-costs points, every wrong guess too. Guess without zooming at all and you take
-the full 1000.
+Errate das Gemälde. Du startest tief in ein berühmtes Bild gezoomt — jeder
+Zoom-Schritt nach außen kostet Punkte, jeder Fehltipp auch. Wer ohne einen
+einzigen Zoom richtig rät, nimmt die vollen 1000.
 
-A single-file mobile-first web game: open `index.html` in any browser and play.
-No build, no server, no dependencies.
+Ein Einzeldatei-Webspiel, mobile-first: `index.html` in einem beliebigen Browser
+öffnen und spielen. Kein Build, kein Server, keine Abhängigkeiten.
 
-## How it works
+## Wie es funktioniert
 
-- 50 famous public-domain paintings, images hotlinked from Wikimedia Commons.
-- Hold the blue **−** button (or pinch) to zoom out — fluidly, and one-way only:
-  there's no zooming back in.
-- Green **✓** opens the guess field (autocomplete over titles and artists),
-  red **✕** gives up.
-- Scoring: 1000 untouched; first zoom-out costs a flat 200, then a gentle slide
-  down to 100 at full view. Wrong guesses cost 120.
-- Tap the painting to hide the UI and just look.
+- 50 berühmte gemeinfreie Gemälde, Bilder direkt von Wikimedia Commons geladen.
+- **Zoom** halten (oder aufziehen) und herauszoomen — flüssig und nur in eine
+  Richtung: zurück geht es nicht. **Raten** öffnet das Eingabefeld
+  (Vorschläge über Titel und Künstler), **Aufgeben** beendet die Runde.
+- Von ×12 auf Vollbild sind es rund 9 Sekunden Halten.
 
-## Development
+## Die Punkte
 
-`generate.py` (Python 3, stdlib only) refreshes the painting data: it resolves
-image URLs and two-sentence descriptions from Wikipedia and injects them into
-`index.html` between the `PAINTINGS:START/END` markers. Edit the `CURATED`
-list to change the roster. Re-running preserves hand-tuned `focal` /
-`startScale` values. The game itself never needs Python.
+- **1000**, wenn du gar nicht erst zoomst.
+- Sobald du zoomst, kostet das erst einmal pauschal **200** — der Preis dafür,
+  den Mut-Bonus aufzugeben. Danach geht es von 800 auf 100 hinunter.
+- **Preis pro Verdopplung:** Jede Halbierung der Zoomstufe kostet gleich viel
+  (rund 195 Punkte). Das ist bewusst nicht linear: Was du erkennen kannst, hängt
+  an der sichtbaren *Fläche*, und die wächst quadratisch. Linear nach Zoomstufe
+  abgerechnet wäre die Hälfte des Guthabens zwischen ×12 und ×6 verbrannt — also
+  dort, wo statt 0,7 % gerade einmal 2,8 % des Bildes zu sehen sind und noch
+  nichts zu erkennen ist. So sind die frühen, blinden Schritte billig und die
+  letzten, verräterischen teuer.
+- **Reaktionsrabatt:** Beim Loslassen federt das Bild die letzten 0,3 Sekunden
+  zurück. Die Zeit zwischen „ich erkenne es!" und „Finger hoch" soll nichts
+  kosten. Jeder Druck bewirkt dabei mindestens so viel wie ein kurzer Tipp
+  (−4 %), damit ein kurzer Druck nicht wirkungslos verpufft.
+- **Fehltipp** kostet 15 % des aktuellen Standes — sticht immer gleich stark,
+  ruiniert aber nie eine Runde.
 
-All paintings are public domain; descriptions are from Wikipedia
+Auf das Bild tippen blendet die Bedienung aus, wenn du einfach nur schauen willst.
+
+## Gestaltung
+
+Oberfläche auf Deutsch, Gemäldedaten englisch (Originaltitel, englische
+Wikipedia-Beschreibungen).
+
+Die Farben sind aus einem Screenshot der ZEIT-App (Dark Mode) Pixel für Pixel
+gemessen, nicht geschätzt: Grund `#111111`, Karten `#212121`, Linien `#2C2C2C`,
+Text `#F5F6F6`, Signalrot `#E0352F`. Die Hausschriften der ZEIT (Tablet Gothic,
+FF Franziska) sind Kaufschriften und hier nicht verwendet — stattdessen die
+nächste Näherung, die auf Mac und iPhone vorinstalliert ist: Helvetica Neue für
+Headlines und Oberfläche, Charter für Fließtext. So bleibt das Spiel eine
+eigenständige Datei, die nichts nachlädt.
+
+## Entwicklung
+
+`generate.py` (Python 3, nur Standardbibliothek) frischt die Gemäldedaten auf:
+Es löst Bild-URLs und zweisätzige Beschreibungen über Wikipedia auf und schreibt
+sie in `index.html` zwischen die Marken `PAINTINGS:START/END`. Die Liste `CURATED`
+bestimmt das Feld. Ein erneuter Lauf erhält von Hand gesetzte `focal`- und
+`startScale`-Werte. Das Spiel selbst braucht kein Python.
+
+Alle Gemälde sind gemeinfrei; die Beschreibungen stammen aus der Wikipedia
 (CC BY-SA).
