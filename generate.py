@@ -79,7 +79,7 @@ START = "<!-- PAINTINGS:START"
 END = "<!-- PAINTINGS:END -->"
 
 
-UA = {"User-Agent": "ZoomOut-game/0.1 (local prototype)"}
+UA = {"User-Agent": "Bilderkennung-game/0.1 (local prototype)"}
 
 
 def api_query(params):
