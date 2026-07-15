@@ -5,9 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<!-- Auf dem Homescreen ist nur Platz für ~12 Zeichen; ohne das hier stünde der
+     abgeschnittene <title> unter dem Icon -->
+<meta name="apple-mobile-web-app-title" content="Bilderkennung">
+<!-- Uhr und Batterie weiß über dem Bild, statt weißer Leiste über schwarzem Spiel.
+     Der Kopf fängt die Statusleiste per env(safe-area-inset-top) ab. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#111111">
 <title>ZEIT Bilderkennung</title>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <style>
   /* Farben Pixel für Pixel aus einem Screenshot der ZEIT-App (Dark Mode) gemessen —
      nicht geschätzt. Auffällig: die Grautöne sind exakt neutral (R=G=B), kein
