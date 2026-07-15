@@ -16,11 +16,11 @@
      Der Kopf fängt die Statusleiste per env(safe-area-inset-top) ab. -->
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#111111">
-<title>ZEIT Bilderkennung</title>
+<title>Bilderkennung</title>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-180.png">
 <style>
-  /* Farben Pixel für Pixel aus einem Screenshot der ZEIT-App (Dark Mode) gemessen —
+  /* Farben Pixel für Pixel aus einem Screenshot der Vorlage-App (Dark Mode) gemessen —
      nicht geschätzt. Auffällig: die Grautöne sind exakt neutral (R=G=B), kein
      Blaustich, und der Grund ist #111 statt reinem Schwarz. */
   :root {
@@ -30,7 +30,7 @@
     --ink: #F5F6F6;       /* Text */
     --muted: #949494;     /* Dachzeilen, Sekundärtext */
     --line: #2C2C2C;      /* Trennlinien und Rahmen */
-    --accent: #E0352F;    /* ZEIT-Rot, gemessen am Z+-Badge. Signalfarbe, sonst nichts */
+    --accent: #E0352F;    /* Signalrot, aus der Vorlage gemessen. Akzent, sonst nichts */
     --edge: 16px;         /* Seitenrand der App */
 
     /* Die echten Hausschriften (Tablet Gothic für Headlines/UI, FF Franziska für
@@ -48,7 +48,7 @@
     -webkit-user-select: none; user-select: none;
   }
 
-  /* Der Kern der ZEIT-Anmutung: fett, eng gesetzt, echte Silbentrennung.
+  /* Der Kern der Anmutung: fett, eng gesetzt, echte Silbentrennung.
      Ohne lang="de" am <html> trennt Safari nach englischen Regeln. */
   .head {
     font-family: var(--font-head); font-weight: 700;
@@ -66,10 +66,7 @@
     background: var(--bg); border-bottom: 1px solid var(--line);
   }
   header .meta { display: flex; flex-direction: column; gap: 2px; }
-  /* Der echte ZEIT-Schriftzug ist eine Individualschrift des Verlags und nicht
-     nachbaubar. Nur die Anmutung: Antiqua-Versalien, daneben die Grotesk. */
   header h1 { margin: 0; font-size: 17px; font-weight: normal; line-height: 1; }
-  header h1 .zeit { font-family: var(--font-text); letter-spacing: 0.14em; }
   header h1 .game { font-family: var(--font-head); font-weight: 700; letter-spacing: -0.01em; }
   header .sub { font-size: 11px; font-family: var(--font-head); color: var(--muted); }
   header .sub b { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
@@ -152,8 +149,8 @@
   .suggestions .item small { color: var(--muted); }
   .suggestions .item.active { background: #2A2A2A; }
 
-  /* Die Bedienleiste ist die Tab-Pille der ZEIT-App — dieselbe Leiste, in der in der
-     App „Spiele“ steht. Zoom bekommt den doppelten Anteil: er ist der
+  /* Die Bedienleiste ist die Tab-Pille der Vorlage-App — dieselbe Leiste, in der dort
+     „Spiele“ steht. Zoom bekommt den doppelten Anteil: er ist der
      Haupt-Interaktionspunkt und muss im Gehen zielbar bleiben. */
   .tabbar {
     display: flex; align-items: stretch; flex: 0 0 auto; padding: 5px;
@@ -243,7 +240,7 @@
 
 <header>
   <div class="meta">
-    <h1><span class="zeit">ZEIT</span> <span class="game">Bilderkennung</span></h1>
+    <h1><span class="game">Bilderkennung</span></h1>
     <span class="sub">Bild <b id="roundNo">1</b>/<b id="roundTot">?</b> · Gesamt <b id="total">0</b></span>
   </div>
   <div class="ptsbox">
