@@ -92,10 +92,13 @@
     transform: scale(var(--scale));
     -webkit-user-drag: none; pointer-events: none;
   }
+  /* only while the grace rewind settles — a transition during the live glide would drag */
+  .stage img.settling { transition: transform 0.22s ease-out; }
   .stage .vignette { position: absolute; inset: 0; pointer-events: none;
     box-shadow: inset 0 0 140px 30px rgba(0,0,0,0.55); }
-  .stage .hint { position: absolute; top: calc(72px + env(safe-area-inset-top)); left: 0; right: 0;
-    text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; opacity: 0.8;
+  .stage .hint { position: absolute; top: calc(84px + env(safe-area-inset-top)); left: var(--edge); right: var(--edge);
+    text-align: center; font-size: 12px; font-family: var(--font-head);
+    color: var(--muted); pointer-events: none;
     text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
 
   .guessbar { position: relative; flex: 0 0 auto; display: none; }
@@ -233,21 +236,23 @@
 (function () {
   const MAX_POINTS = 1000;
   const MIN_POINTS = 100;
-  const WRONG_PENALTY = 120;
+  const WRONG_PENALTY_PCT = 0.15; // wrong guess costs a share of what's left, not a flat sum:
+                                  // stings the same at 1000 as at 200, never wrecks a round
   const PINCH_SENS = 0.35;      // <1 = gentler pinch; low = fine, deliberate art-critic control
-  const ZOOM_TAP_FACTOR = 0.96; // one quick tap = a 4% stutter outward — spam-tappable
+  const ZOOM_TAP_FACTOR = 0.96; // the least a press ever does: a 4% stutter outward
   const ZOOM_HOLD_START = 0.85; // hold begins feather-slow (per-second scale factor)...
-  const ZOOM_HOLD_FULL  = 0.45; // ...and ramps to this full glide speed
+  const ZOOM_HOLD_FULL  = 0.75; // ...and ramps to this full glide speed (~9s from ×12 to full view)
   const ZOOM_HOLD_RAMP  = 1.2;  // seconds of holding to reach full speed
+  const GRACE_MS = 300;     // reaction rebate: releasing rewinds the last 300ms of glide, so the
+                            // gap between "I recognise it!" and finger-up costs nothing
   const TOUCH_COST = 200;   // flat cost the moment you zoom out at all ("Smart Boys' Bonus" gate)
-  const SLIDE_CURVE = 0.75; // <1 bends the post-touch slide upward: early zoom-outs cost less
 
   const $ = (id) => document.getElementById(id);
   const stage = $("stage"), art = $("art");
   const guessInput = $("guess"), suggestions = $("suggestions"), flash = $("flash"), hint = $("hint");
 
   let deck = [], round = 0, cur = null;
-  let scale = 7, minScaleReached = 7, penalties = 0, total = 0, activeSugg = -1;
+  let scale = 7, minScaleReached = 7, wrongMult = 1, total = 0, activeSugg = -1;
 
   function shuffle(a) {
     a = a.slice();
@@ -275,14 +280,19 @@
     try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) {}
   }
 
+  // Price per doubling, not per scale step. What you learn depends on the visible
+  // *area*, which grows quadratically as you pull out — so charging linearly by scale
+  // burns half the budget between ×12 and ×6, where 0.7% → 2.8% of the canvas is
+  // showing and nothing is recognisable yet. Logarithmic frac makes every halving of
+  // the zoom cost the same (~195 points): cheap while blind, expensive once telling.
   function potential() {
     const s = cur.startScale;
-    const frac = (minScaleReached - 1) / (s - 1);
+    const frac = Math.log(minScaleReached) / Math.log(s);   // 1 at start scale → 0 at full view
     const untouched = minScaleReached >= s - 0.01;   // never zoomed out at all
     const fromZoom = untouched
       ? MAX_POINTS                                   // full 1000: the Smart Boys' Bonus
-      : MIN_POINTS + (MAX_POINTS - TOUCH_COST - MIN_POINTS) * Math.pow(frac, SLIDE_CURVE);  // 800 → 100, gentle early
-    return Math.max(0, Math.round(fromZoom - penalties));
+      : MIN_POINTS + (MAX_POINTS - TOUCH_COST - MIN_POINTS) * frac;  // 800 → 100
+    return Math.max(0, Math.round(fromZoom * wrongMult));
   }
 
   function setScale(v) {
@@ -292,7 +302,7 @@
     $("pointsNow").textContent = potential();
     $("zoomLvl").textContent = "×" + scale.toFixed(1);
   }
-  function resetScale(v) {  // new round: the only way scale ever goes back up
+  function resetScale(v) {  // the only way scale ever goes back up: a new round, or the grace rewind
     scale = v; minScaleReached = v;
     art.style.setProperty("--scale", v);
     $("pointsNow").textContent = potential();
@@ -355,7 +365,7 @@
 
   function startRound() {
     cur = deck[round];
-    penalties = 0;
+    wrongMult = 1;
     $("roundNo").textContent = round + 1;
     art.src = cur.img;
     applyFocal(cur);
@@ -395,9 +405,10 @@
   function submitGuess(id) {
     if (guessInput.disabled) return;
     if (id === cur.id) { endRound(potential(), true); return; }
-    penalties += WRONG_PENALTY;
+    const before = potential();
+    wrongMult *= (1 - WRONG_PENALTY_PCT);
     const wrong = window.PAINTINGS.find(p => p.id === id);
-    setFlash(`Not “${wrong.title}”. −${WRONG_PENALTY}`, "bad");
+    setFlash(`Nicht „${wrong.title}“. −${before - potential()}`, "bad");
     $("pointsNow").textContent = potential();
     guessInput.value = ""; hideSuggestions();
   }
@@ -464,7 +475,8 @@
 
   // hold = fluid continuous zoom-out; quick tap = small nudge
   const zoomBtn = $("zoomout");
-  let rafId = null, lastT = 0, holdStart = 0;
+  let rafId = null, lastT = 0, holdStart = 0, holdStartScale = 0, settleTimer = null;
+  let trail = [];  // recent {t, scale} of this hold — the grace rewind reads its front
   function holdLoop(t) {
     if (lastT) {
       const ramp = Math.min(1, ((t - holdStart) / 1000) / ZOOM_HOLD_RAMP);
@@ -472,18 +484,42 @@
       setScale(scale * Math.pow(speed, (t - lastT) / 1000));
     }
     lastT = t;
+    trail.push({ t: t, scale: scale });
+    // drop anything the rewind can no longer need: keep exactly one frame older than
+    // GRACE_MS at the front, so trail[0] is the scale we had 300ms ago
+    while (trail.length > 1 && trail[1].t <= t - GRACE_MS) trail.shift();
     rafId = requestAnimationFrame(holdLoop);
+  }
+  // hand back the last GRACE_MS of glide: your reaction time shouldn't cost points.
+  // Rewinding the image (rather than just the price) keeps this un-exploitable —
+  // tapping repeatedly can't farm free zoom, because every release undoes itself.
+  function rewind(v) {
+    if (v <= scale) return;
+    art.classList.add("settling");   // animate it, so it reads as intent, not as a glitch
+    resetScale(v);
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => art.classList.remove("settling"), 250);
   }
   zoomBtn.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     zoomBtn.setPointerCapture(e.pointerId);
-    holdStart = performance.now(); lastT = 0;
+    clearTimeout(settleTimer);
+    art.classList.remove("settling");  // never let the settle transition slow the live glide
+    zoomBtn.classList.add("holding");
+    holdStart = performance.now(); lastT = 0; holdStartScale = scale; trail = [];
     rafId = requestAnimationFrame(holdLoop);
   });
+  // One rule for every press, no threshold to fall through: a press always moves at least
+  // as far as a tap, and anything beyond that gets the last GRACE_MS refunded. Without the
+  // tap floor, a short press would rewind itself to a standstill and read as a dead button.
   function endHold() {
+    zoomBtn.classList.remove("holding");
     if (rafId === null) return;
     cancelAnimationFrame(rafId); rafId = null;
-    if (performance.now() - holdStart < 200) setScale(scale * ZOOM_TAP_FACTOR);
+    const graceTarget = trail.length ? trail[0].scale : holdStartScale;   // where we were 300ms ago
+    const target = Math.min(graceTarget, holdStartScale * ZOOM_TAP_FACTOR);
+    if (target > scale) rewind(target);   // held a while: hand the reaction time back
+    else setScale(target);                // barely pressed: still worth a tap's nudge
   }
   zoomBtn.addEventListener("pointerup", endHold);
   zoomBtn.addEventListener("pointercancel", endHold);
