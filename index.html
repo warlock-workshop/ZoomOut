@@ -173,8 +173,9 @@
   .flash.bad { color: var(--muted); }
   .flash.good { color: var(--ink); }
 
-  /* Die Auflösung wird als ZEIT-Artikel gesetzt: randloses Aufmacherbild, rotes
-     Ressort-Label, fette enge Grotesk-Headline, graue Dachzeile, Antiqua-Fließtext. */
+  /* Die Auflösung ist ein Ergebnis, kein Artikel — also nach dem Muster des
+     Ergebnis-Blocks der App gebaut (Überschrift, graue Datenzeile, Ergebnis-Kasten),
+     nicht nach dem eines Artikel-Aufmachers. */
   .reveal {
     position: fixed; inset: 0; background: rgba(0,0,0,0.75);
     display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px;
@@ -185,39 +186,40 @@
     max-width: 440px; width: 100%; max-height: 92vh; overflow-y: auto;
     text-align: left;
   }
+  /* Das Gemälde immer vollständig zeigen, egal ob Hoch- oder Querformat: das Bild
+     wird in den Rahmen eingepasst statt ihn zu füllen. Bei Hochformat bleiben
+     seitlich schwarze Ränder — das ist der Preis dafür, nichts abzuschneiden. */
+  .reveal .card .shot {
+    background: #000; border-radius: 7px 7px 0 0; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
   .reveal .card img {
-    display: block; width: 100%; max-height: 32vh; object-fit: cover;
-    border-radius: 7px 7px 0 0; margin: 0;
+    display: block; max-width: 100%; max-height: 34vh;
+    width: auto; height: auto; margin: 0;
   }
-  .reveal .card img[src=""], .reveal .card img:not([src]) { display: none; }
+  .reveal .card img:not([src]) { display: none; }   /* Endstand: kein Bild, .shot fällt zusammen */
   .artbody { padding: 16px var(--edge) var(--edge); }
-  /* an der Stelle, an der in der App „Z+ Volkswagen-Krise“ steht */
-  .reveal .card .period {
-    font-family: var(--font-head); font-weight: 700; font-size: 14px;
-    color: var(--accent); margin-bottom: 6px;
-  }
-  .reveal .card .period:empty { display: none; }
-  .reveal .card h2 { margin: 0 0 8px; font-size: 27px; }
+  .reveal .card h2 { margin: 0 0 6px; font-size: 27px; }
+  /* eine Datenzeile, keine Artikel-Dachzeile: Künstler · Jahr · Epoche */
   .reveal .card .by {
     font-family: var(--font-head); font-size: 14px; color: var(--muted); margin-bottom: 14px;
   }
+  /* Ergebnis-Kasten nach dem Vorbild der Spielstand-Box in der App */
+  .scorebox {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px var(--edge); margin-bottom: 16px;
+    font-family: var(--font-head);
+  }
+  .scorebox .label { font-size: 15px; color: var(--muted); }
+  .scorebox .earned { font-size: 26px; font-weight: 700; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; }
+  .scorebox .earned.zero { color: var(--muted); }
   .reveal .card .desc {
     font-family: var(--font-text); font-size: 15px; line-height: 1.5;
     color: var(--ink); margin: 0 0 16px;
   }
   .reveal .card .desc:empty { display: none; }
-  /* Punktekasten im Stil der Ergebnis-Box aus der App */
-  .scorebox {
-    display: flex; align-items: baseline; justify-content: space-between;
-    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
-    padding: 12px var(--edge); margin-bottom: 14px;
-    font-family: var(--font-head);
-  }
-  .scorebox .label { font-size: 14px; color: var(--muted); }
-  .scorebox .earned { font-size: 26px; font-weight: 700; letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums; }
-  .scorebox .earned.zero { color: var(--muted); }
-  .scorebox:has(.earned:empty) { display: none; }
   .reveal .card button { width: 100%; }
 </style>
 </head>
@@ -278,16 +280,15 @@
 
 <div class="reveal" id="reveal">
   <div class="card">
-    <img id="revealImg" alt="">
+    <div class="shot"><img id="revealImg" alt=""></div>
     <div class="artbody">
-      <div class="period" id="revealPeriod"></div>
-      <h2 class="head" id="revealTitle" lang="en"></h2>
+      <h2 class="head" id="revealTitle"></h2>
       <div class="by" id="revealBy"></div>
-      <p class="desc" id="revealDesc"></p>
-      <div class="scorebox">
+      <div class="scorebox" id="scorebox">
         <span class="label">Punkte</span>
         <b class="earned" id="revealEarned"></b>
       </div>
+      <p class="desc" id="revealDesc"></p>
       <button class="primary" id="nextBtn">Nächstes Bild</button>
     </div>
   </div>
@@ -483,9 +484,10 @@
     total += earned; $("total").textContent = total;
     $("revealImg").src = cur.img;
     $("revealTitle").textContent = cur.title;
-    $("revealBy").textContent = `${cur.artist} · ${cur.year}`;
-    $("revealPeriod").textContent = cur.period || "";
+    // eine Datenzeile statt Dachzeile + Ressort-Label: das hier ist ein Ergebnis
+    $("revealBy").textContent = [cur.artist, cur.year, cur.period].filter(Boolean).join(" · ");
     $("revealDesc").textContent = cur.description || "";
+    $("scorebox").style.display = "";
     const e = $("revealEarned");
     e.textContent = (won ? "+" : "") + earned;
     e.className = "earned" + (earned === 0 ? " zero" : "");
@@ -500,9 +502,9 @@
     $("revealImg").removeAttribute("src");
     $("revealTitle").textContent = "Geschafft!";
     $("revealBy").textContent = `${total} Punkte bei ${deck.length} Bildern.`;
-    $("revealPeriod").textContent = "";
     $("revealDesc").textContent = "";
     $("revealEarned").textContent = "";
+    $("scorebox").style.display = "none";   // im Endstand gibt es keine Rundenpunkte
     $("nextBtn").textContent = "Noch einmal spielen";
     $("reveal").classList.add("show");
     deck = buildDeck(); round = -1;
