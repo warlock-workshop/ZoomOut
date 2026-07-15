@@ -133,17 +133,19 @@ def fetch_extract(article, lang="en", retries=5):
     url = (f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/"
            + urllib.parse.quote(article.replace(" ", "_"), safe="()"))
     for attempt in range(retries):
-        time.sleep(0.6)  # be polite — stay under the rate limit
+        time.sleep(0.8)  # be polite — stay under the rate limit
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
                 return trim((json.load(r).get("extract") or "").strip())
         except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < retries - 1:
-                time.sleep(1.5 * (attempt + 1))  # back off and retry
-                continue
-            return ""
+            if e.code == 404:
+                return ""  # no such article — retrying won't conjure one
         except Exception:
-            return ""
+            pass  # timeout, reset connection, bad JSON — all worth another try
+        # anything else is worth retrying: giving up on the first hiccup silently
+        # dropped five descriptions that were there all along
+        if attempt < retries - 1:
+            time.sleep(1.5 * (attempt + 1))
     return ""
 
 
@@ -188,7 +190,10 @@ def main():
         f"<script>window.PAINTINGS = {json.dumps(paintings, ensure_ascii=False)};</script>\n"
         f"{END}"
     )
-    new_html = re.sub(re.escape(START) + r".*?" + re.escape(END), block, html, count=1, flags=re.S)
+    # Replacement als Funktion, nicht als String: re.sub deutet sonst Escape-Sequenzen
+    # darin. Ein von json.dumps sauber escaptes \n wäre wieder zu einem echten
+    # Zeilenumbruch geworden — mitten in ein JS-String-Literal, und das Spiel lädt nicht mehr.
+    new_html = re.sub(re.escape(START) + r".*?" + re.escape(END), lambda _: block, html, count=1, flags=re.S)
     with open(HTML, "w", encoding="utf-8") as f:
         f.write(new_html)
 
